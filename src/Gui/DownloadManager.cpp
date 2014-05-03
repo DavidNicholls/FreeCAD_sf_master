@@ -23,7 +23,7 @@
 
 #include "PreCompiled.h"
 #include <stdio.h>
-#include <math.h>
+#include <cmath>
 
 #include <QByteArray>
 #include <QDockWidget>
@@ -76,7 +76,10 @@ DownloadManager::DownloadManager(QWidget *parent)
     Gui::DockWindowManager* pDockMgr = Gui::DockWindowManager::instance();
     QDockWidget* dw = pDockMgr->addDockWindow(QT_TR_NOOP("Download Manager"),
         this, Qt::BottomDockWidgetArea);
-    dw->setFeatures(QDockWidget::DockWidgetMovable|QDockWidget::DockWidgetFloatable);
+    dw->setFeatures(QDockWidget::DockWidgetMovable|
+                    QDockWidget::DockWidgetFloatable|
+                    QDockWidget::DockWidgetClosable);
+    dw->setAttribute(Qt::WA_DeleteOnClose);
     dw->show();
 }
 
@@ -87,6 +90,12 @@ DownloadManager::~DownloadManager()
     if (m_iconProvider)
         delete m_iconProvider;
     delete ui;
+    self = 0;
+}
+
+void DownloadManager::closeEvent(QCloseEvent* e)
+{
+    QDialog::closeEvent(e);
 }
 
 int DownloadManager::activeDownloads() const

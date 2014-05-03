@@ -34,6 +34,7 @@ set(SketcherGui_MOC_HDRS
     TaskSketcherValidation.h
     TaskDlgEditSketch.h
     SketchOrientationDialog.h
+    SketcherSettings.h
 )
 fc_wrap_cpp(SketcherGui_MOC_SRCS ${SketcherGui_MOC_HDRS})
 SOURCE_GROUP("Moc" FILES ${SketcherGui_MOC_SRCS})
@@ -47,6 +48,7 @@ set(SketcherGui_UIC_SRCS
     TaskSketcherValidation.ui
     InsertDatum.ui
     SketchOrientationDialog.ui
+    SketcherSettings.ui
 )
 qt4_wrap_ui(SketcherGui_UIC_HDRS ${SketcherGui_UIC_SRCS})
 
@@ -90,6 +92,8 @@ SET(SketcherGui_SRCS
     EditDatumDialog.h
     SketchOrientationDialog.cpp
     SketchOrientationDialog.h
+    SketcherSettings.cpp
+    SketcherSettings.h
     TaskDlgEditSketch.cpp
     TaskDlgEditSketch.h
     ViewProviderPython.cpp
@@ -110,20 +114,10 @@ fc_target_copy_resource(SketcherGui
     ${CMAKE_BINARY_DIR}/Mod/Sketcher
     ${SketcherGui_Scripts})
 
-if(MSVC)
-    set_target_properties(SketcherGui PROPERTIES SUFFIX ".pyd")
-    set_target_properties(SketcherGui PROPERTIES DEBUG_OUTPUT_NAME "SketcherGui_d")
-    set_target_properties(SketcherGui PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Sketcher)
-    set_target_properties(SketcherGui PROPERTIES PREFIX "../")
-elseif(MINGW)
-    set_target_properties(SketcherGui PROPERTIES SUFFIX ".pyd")
-    set_target_properties(SketcherGui PROPERTIES DEBUG_OUTPUT_NAME "SketcherGui_d")
-    set_target_properties(SketcherGui PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Sketcher)
+SET_BIN_DIR(SketcherGui SketcherGui /Mod/Sketcher)
+if(WIN32)
     set_target_properties(SketcherGui PROPERTIES PREFIX "")
-else(MSVC)
-    set_target_properties(SketcherGui PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Sketcher)
-    set_target_properties(SketcherGui PROPERTIES PREFIX "")
-    set_target_properties(SketcherGui PROPERTIES INSTALL_RPATH ${INSTALL_RPATH})
-endif(MSVC)
+    set_target_properties(SketcherGui PROPERTIES SUFFIX ".pyd")
+endif(WIN32)
 
 INSTALL(TARGETS SketcherGui DESTINATION lib)

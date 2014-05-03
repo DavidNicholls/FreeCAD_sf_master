@@ -337,25 +337,9 @@ bool SelectionSingleton::hasSelection(const char* doc) const
     return false;
 }
 
-//std::vector<SelectionObject> SelectionSingleton::getSelectionEx(const char* pDocName) const
-//{
-//    return getSelectionEx(pDocName,App::DocumentObject::getClassTypeId());
-//}
-//
-//std::vector<SelectionObject> SelectionSingleton::getSelectionEx(const char* pDocName,const char* typeName) const
-//{
-//    // search the type
-//    Base::Type typeId;
-//    if(typeName)
-//        typeId = Base::Type::fromName(typeName);
-//    else
-//        typeId = App::DocumentObject::getClassTypeId();
-//    return getSelectionEx(pDocName,typeId);
-//}
 std::vector<SelectionObject> SelectionSingleton::getSelectionEx(const char* pDocName, Base::Type typeId) const
 {
     std::vector<SelectionObject> temp;
-    
     std::map<App::DocumentObject*,SelectionObject> SortMap;
 
     // check the type
@@ -398,8 +382,14 @@ std::vector<SelectionObject> SelectionSingleton::getSelectionEx(const char* pDoc
         }
     }
 
-    for (std::map<App::DocumentObject*,SelectionObject>::const_iterator It = SortMap.begin();It != SortMap.end();++It) 
-        temp.push_back(It->second);
+    // The map looses the order thus we have to go again through the list and pick up the SelectionObject from the map
+    for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
+        std::map<App::DocumentObject*,SelectionObject>::iterator Jt = SortMap.find(It->pObject);
+        if (Jt != SortMap.end()) {
+            temp.push_back(Jt->second);
+            SortMap.erase(Jt);
+        }
+    }
 
     return temp;
 }
@@ -637,7 +627,7 @@ bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectN
     if (isSelected(pDocName, pObjectName, pSubName))
         return true;
 
-     _SelObj temp;
+    _SelObj temp;
 
     temp.pDoc = getDocument(pDocName);
 
@@ -691,8 +681,62 @@ bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectN
         // allow selection
         return true;
     }
-    else { // neither an existing nor active document available 
-        //assert(0);
+    else {
+        // neither an existing nor active document available 
+        // this can often happen when importing .iv files
+        Base::Console().Error("Cannot add to selection: no document '%s' found.\n", pDocName);
+        return false;
+    }
+}
+
+bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectName, const std::vector<std::string>& pSubNames)
+{
+    // already in ?
+    //if (isSelected(pDocName, pObjectName, pSubName))
+    //    return true;
+
+    _SelObj temp;
+
+    temp.pDoc = getDocument(pDocName);
+
+    if (temp.pDoc) {
+        if(pObjectName)
+            temp.pObject = temp.pDoc->getObject(pObjectName);
+        else
+            temp.pObject = 0;
+
+        if (temp.pObject)
+            temp.TypeName = temp.pObject->getTypeId().getName();
+
+        temp.DocName  = pDocName;
+        temp.FeatName = pObjectName ? pObjectName : "";
+        for (std::vector<std::string>::const_iterator it = pSubNames.begin(); it != pSubNames.end(); ++it) {
+            temp.SubName  = it->c_str();
+            temp.x        = 0;
+            temp.y        = 0;
+            temp.z        = 0;
+
+            _SelList.push_back(temp);
+        }
+
+        SelectionChanges Chng;
+
+        Chng.pDocName  = pDocName;
+        Chng.pObjectName = pObjectName ? pObjectName : "";
+        Chng.pSubName  = "";
+        Chng.x         = 0;
+        Chng.y         = 0;
+        Chng.z         = 0;
+        Chng.Type      = SelectionChanges::AddSelection;
+
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+
+        // allow selection
+        return true;
+    }
+    else {
+        // neither an existing nor active document available 
         // this can often happen when importing .iv files
         Base::Console().Error("Cannot add to selection: no document '%s' found.\n", pDocName);
         return false;
@@ -917,7 +961,6 @@ SelectionSingleton::~SelectionSingleton()
 {
 }
 
-
 SelectionSingleton* SelectionSingleton::_pcSingleton = NULL;
 
 SelectionSingleton& SelectionSingleton::instance(void)
@@ -933,21 +976,6 @@ void SelectionSingleton::destruct (void)
         delete _pcSingleton;
     _pcSingleton = 0;
 }
-/*
-void SelectionSingleton::addObject(App::DocumentObject *f)
-{
-  _ObjectSet.insert(f);
-
-}
-
-void SelectionSingleton::removeObject(App::DocumentObject *f)
-{
-  _ObjectSet.erase(f);
-
-
-}
-*/
-
 
 //**************************************************************************
 // Python stuff
@@ -955,7 +983,8 @@ void SelectionSingleton::removeObject(App::DocumentObject *f)
 // SelectionSingleton Methods  // Methods structure
 PyMethodDef SelectionSingleton::Methods[] = {
     {"addSelection",         (PyCFunction) SelectionSingleton::sAddSelection, 1, 
-     "addSelection(object) -- Add an object to the selection"},
+     "addSelection(object,[string,float,float,float]) -- Add an object to the selection\n"
+     "where string is the sub-element name and the three floats represent a 3d point"},
     {"removeSelection",      (PyCFunction) SelectionSingleton::sRemoveSelection, 1,
      "removeSelection(object) -- Remove an object from the selection"},
     {"clearSelection"  ,     (PyCFunction) SelectionSingleton::sClearSelection, 1,
@@ -986,13 +1015,25 @@ PyMethodDef SelectionSingleton::Methods[] = {
     {"removeObserver",      (PyCFunction) SelectionSingleton::sRemSelObserver, 1,
      "removeObserver(Object) -- Uninstall an observer\n"},
     {"addSelectionGate",      (PyCFunction) SelectionSingleton::sAddSelectionGate, 1,
-    "addSelectionGate(String) -- activate the selection gate.\n"
-    "The selection gate will prohibit all selections which do not match\n"
-    "the given selection filter string. Examples strings are:\n"
-    "'SELECT Part::Feature SUBELEMENT Edge',\n"
-    "'SELECT Robot::RobotObject'\n"},
+     "addSelectionGate(String|Filter|Gate) -- activate the selection gate.\n"
+     "The selection gate will prohibit all selections which do not match\n"
+     "the given selection filter string.\n"
+     " Examples strings are:\n"
+     "'SELECT Part::Feature SUBELEMENT Edge',\n"
+     "'SELECT Robot::RobotObject'\n"
+     "\n"
+     "You can also set an instance of SelectionFilter:\n"
+     "filter = Gui.Selection.Filter('SELECT Part::Feature SUBELEMENT Edge')\n"
+     "Gui.Selection.addSelectionGate(filter)\n"
+     "\n"
+     "And the most flexible approach is to write your own selection gate class\n"
+     "that implements the method 'allow'\n"
+     "class Gate:\n"
+     "  def allow(self,doc,obj,sub):\n"
+     "    return (sub[0:4] == 'Face')\n"
+     "Gui.Selection.addSelectionGate(Gate())"},
     {"removeSelectionGate",      (PyCFunction) SelectionSingleton::sRemoveSelectionGate, 1,
-     "removeSelectionGate() -- remove the active slection gate\n"},
+     "removeSelectionGate() -- remove the active selection gate\n"},
     {NULL, NULL, 0, NULL}  /* Sentinel */
 };
 
@@ -1176,14 +1217,33 @@ PyObject *SelectionSingleton::sRemSelObserver(PyObject * /*self*/, PyObject *arg
 PyObject *SelectionSingleton::sAddSelectionGate(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)
 {
     char* filter;
-    if (!PyArg_ParseTuple(args, "s",&filter))
-        return NULL;                             // NULL triggers exception 
+    if (PyArg_ParseTuple(args, "s",&filter)) {
+        PY_TRY {
+            Selection().addSelectionGate(new SelectionFilterGate(filter));
+            Py_Return;
+        } PY_CATCH;
+    }
 
-    PY_TRY {
-        Selection().addSelectionGate(new SelectionFilterGate(filter));
-    } PY_CATCH;
+    PyErr_Clear();
+    PyObject* filterPy;
+    if (PyArg_ParseTuple(args, "O!",SelectionFilterPy::type_object(),&filterPy)) {
+        PY_TRY {
+            Selection().addSelectionGate(new SelectionFilterGatePython(static_cast<SelectionFilterPy*>(filterPy)));
+            Py_Return;
+        } PY_CATCH;
+    }
 
-    Py_Return;
+    PyErr_Clear();
+    PyObject* gate;
+    if (PyArg_ParseTuple(args, "O",&gate)) {
+        PY_TRY {
+            Selection().addSelectionGate(new SelectionGatePython(Py::Object(gate, false)));
+            Py_Return;
+        } PY_CATCH;
+    }
+
+    PyErr_SetString(PyExc_ValueError, "Argument is neither string nor SelectionFiler nor SelectionGate");
+    return 0;
 }
 
 PyObject *SelectionSingleton::sRemoveSelectionGate(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)

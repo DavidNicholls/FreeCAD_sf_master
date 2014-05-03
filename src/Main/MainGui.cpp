@@ -184,7 +184,7 @@ int main( int argc, char ** argv )
     // Make sure to setup the Qt locale system before setting LANG and LC_ALL to C.
     // which is needed to use the system locale settings.
     (void)QLocale::system();
-    // https://sourceforge.net/apps/mantisbt/free-cad/view.php?id=399
+    // http://www.freecadweb.org/tracker/view.php?id=399
     // Because of setting LANG=C the Qt automagic to use the correct encoding
     // for file names is broken. This is a workaround to force the use of UTF-8 encoding
     QFile::setEncodingFunction(myEncoderFunc);
@@ -202,6 +202,25 @@ int main( int argc, char ** argv )
 #else
     setlocale(LC_NUMERIC, "C");
     _putenv("PYTHONPATH=");
+#endif
+
+#if defined (FC_OS_WIN32)
+    int argc_ = argc;
+    QVector<QByteArray> data;
+    QVector<char *> argv_;
+
+    // get the command line arguments as unicode string
+    {
+        QCoreApplication app(argc, argv);
+        QStringList args = app.arguments();
+        args.pop_front(); // remove 1st argument
+        argv_.push_back(argv[0]);
+        for (QStringList::iterator it = args.begin(); it != args.end(); ++it) {
+            data.push_back(it->toUtf8());
+            argv_.push_back(data.back().data());
+        }
+        argv_.push_back(0); // 0-terminated string
+    }
 #endif
 
     // Name and Version of the Application
@@ -226,7 +245,11 @@ int main( int argc, char ** argv )
         App::Application::Config()["RunMode"] = "Gui";
 
         // Inits the Application 
-        App::Application::init(argc,argv);
+#if defined (FC_OS_WIN32)
+        App::Application::init(argc_, argv_.data());
+#else
+        App::Application::init(argc, argv);
+#endif
 #if defined(_MSC_VER)
         // create a dump file when the application crashes
         std::string dmpfile = App::Application::getUserAppDataDir();

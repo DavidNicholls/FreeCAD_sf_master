@@ -41,11 +41,13 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
 #include <BRepBuilderAPI_Sewing.hxx>
+#include <Geom_Conic.hxx>
 #include <ShapeBuild_ReShape.hxx>
 #include <ShapeFix_Face.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <TopTools_ListIteratorOfListOfShape.hxx>
 #include <TopTools_DataMapIteratorOfDataMapOfShapeShape.hxx>
+#include <TopTools_DataMapIteratorOfDataMapOfIntegerListOfShape.hxx>
 #include <BRep_Builder.hxx>
 #include <Bnd_Box.hxx>
 #include <BRepBndLib.hxx>
@@ -112,6 +114,7 @@ namespace ModelRefine
             Bnd_Box box1, box2;
             BRepBndLib::Add(wire1, box1);
             BRepBndLib::Add(wire2, box2);
+            // Note: This works because we can be sure that the wires do not intersect
             return box2.SquareExtent() < box1.SquareExtent();
         }
     };
@@ -216,6 +219,7 @@ void FaceAdjacencySplitter::recursiveFind(const TopoDS_Face &face, FaceVectorTyp
     for (edgeIt.Initialize(edges); edgeIt.More(); edgeIt.Next())
     {
         //don't try to join across seams.
+        // Note: BRep_Tool::IsClosed(TopoDS::Edge(edgeIt.Value()), face) is also possible?
         ShapeAnalysis_Edge edgeCheck;
         if(edgeCheck.IsSeam(TopoDS::Edge(edgeIt.Value()), face))
             continue;
@@ -371,19 +375,22 @@ TopoDS_Face FaceTypedPlane::buildFace(const FaceVectorType &faces) const
 
     std::sort(wires.begin(), wires.end(), ModelRefine::WireSort());
 
-    TopoDS_Face current = BRepLib_MakeFace(wires.at(0), Standard_True);
+    BRepLib_MakeFace faceMaker(wires.at(0), Standard_True);
+    if (faceMaker.Error() != BRepLib_FaceDone)
+        return TopoDS_Face();
+    TopoDS_Face current = faceMaker.Face();
     if (wires.size() > 1)
     {
         ShapeFix_Face faceFix(current);
         faceFix.SetContext(new ShapeBuild_ReShape());
         for (size_t index(1); index<wires.size(); ++index)
             faceFix.Add(wires.at(index));
-        Standard_Boolean signal = faceFix.Perform();
-        if (signal > ShapeExtend_DONE)
+        faceFix.Perform();
+        if (faceFix.Status(ShapeExtend_FAIL))
             return TopoDS_Face();
         faceFix.FixOrientation();
-        signal = faceFix.Perform();
-        if (signal > ShapeExtend_DONE)
+        faceFix.Perform();
+        if(faceFix.Status(ShapeExtend_FAIL))
             return TopoDS_Face();
         current = faceFix.Face();
     }
@@ -469,10 +476,12 @@ TopoDS_Face FaceTypedCylinder::buildFace(const FaceVectorType &faces) const
     //fix newly constructed face. Orientation doesn't seem to get fixed the first call.
     ShapeFix_Face faceFixer(faceMaker.Face());
     faceFixer.SetContext(new ShapeBuild_ReShape());
-    if (faceFixer.Perform() > ShapeExtend_DONE5)
+    faceFixer.Perform();
+    if (faceFixer.Status(ShapeExtend_FAIL))
         return dummy;
     faceFixer.FixOrientation();
-    if (faceFixer.Perform() > ShapeExtend_DONE5)
+    faceFixer.Perform();
+    if (faceFixer.Status(ShapeExtend_FAIL))
         return dummy;
 
     return faceFixer.Face();
@@ -558,6 +567,29 @@ FaceTypedCylinder& ModelRefine::getCylinderObject()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO: change this version after occ fix. Freecad Mantis 1450
+#if OCC_VERSION_HEX <= 0x070000
+void collectConicEdges(const TopoDS_Shell &shell, TopTools_IndexedMapOfShape &map)
+{
+  TopTools_IndexedMapOfShape edges;
+  TopExp::MapShapes(shell, TopAbs_EDGE, edges);
+  
+  for (int index = 1; index <= edges.Extent(); ++index)
+  {
+    const TopoDS_Edge &currentEdge = TopoDS::Edge(edges.FindKey(index));
+    if (currentEdge.IsNull())
+      continue;
+    TopLoc_Location location;
+    Standard_Real first, last;
+    const Handle_Geom_Curve &curve = BRep_Tool::Curve(currentEdge, location, first, last);
+    if (curve.IsNull())
+      continue;
+    if (curve->IsKind(STANDARD_TYPE(Geom_Conic)))
+      map.Add(currentEdge);
+  }
+}
+#endif
+
 FaceUniter::FaceUniter(const TopoDS_Shell &shellIn) : modifiedSignal(false)
 {
     workShell = shellIn;
@@ -606,10 +638,14 @@ bool FaceUniter::process()
                     FaceVectorType temp = adjacencySplitter.getGroup(adjacentIndex);
                     facesToRemove.insert(facesToRemove.end(), temp.begin(), temp.end());
                     // the first shape will be marked as modified, i.e. replaced by newFace, all others are marked as deleted
+                    // jrheinlaender: IMHO this is not correct because references to the deleted faces will be broken, whereas they should
+                    // be replaced by references to the new face. To achieve this all shapes should be marked as
+                    // modified, producing one single new face. This is the inverse behaviour to faces that are split e.g.
+                    // by a boolean cut, where one old shape is marked as modified, producing multiple new shapes
                     if (!temp.empty())
                     {
-                        modifiedShapes.push_back(std::make_pair(temp.front(), newFace));
-                        deletedShapes.insert(deletedShapes.end(), temp.begin()+1, temp.end());
+                        for (FaceVectorType::iterator f = temp.begin(); f != temp.end(); ++f)
+                              modifiedShapes.push_back(std::make_pair(*f, newFace));
                     }
                 }
             }
@@ -635,7 +671,11 @@ bool FaceUniter::process()
             for(sewIt = facesToSew.begin(); sewIt != facesToSew.end(); ++sewIt)
                 sew.Add(*sewIt);
             sew.Perform();
-            workShell = TopoDS::Shell(sew.SewedShape());
+            try {
+                workShell = TopoDS::Shell(sew.SewedShape());
+            } catch (Standard_Failure) {
+                return false;
+            }
             // update the list of modifications
             for (std::vector<ShapePairType>::iterator it = modifiedShapes.begin(); it != modifiedShapes.end(); ++it)
             {
@@ -655,8 +695,14 @@ bool FaceUniter::process()
             for(sewIt = facesToSew.begin(); sewIt != facesToSew.end(); ++sewIt)
                 builder.Add(workShell, *sewIt);
         }
-
-        BRepLib_FuseEdges edgeFuse(workShell, Standard_True);
+        
+        BRepLib_FuseEdges edgeFuse(workShell);
+// TODO: change this version after occ fix. Freecad Mantis 1450
+#if OCC_VERSION_HEX <= 0x070000
+        TopTools_IndexedMapOfShape map;
+        collectConicEdges(workShell, map);
+        edgeFuse.AvoidEdges(map);
+#endif
         TopTools_DataMapOfShapeShape affectedFaces;
         edgeFuse.Faces(affectedFaces);
         TopTools_DataMapIteratorOfDataMapOfShapeShape mapIt;
@@ -669,14 +715,41 @@ bool FaceUniter::process()
         // update the list of modifications
         TopTools_DataMapOfShapeShape faceMap;
         edgeFuse.Faces(faceMap);
-        for (std::vector<ShapePairType>::iterator it = modifiedShapes.begin(); it != modifiedShapes.end(); ++it)
+        for (mapIt.Initialize(faceMap); mapIt.More(); mapIt.Next())
         {
-            if (faceMap.IsBound(it->second))
+            bool isModifiedFace = false;
+            for (std::vector<ShapePairType>::iterator it = modifiedShapes.begin(); it != modifiedShapes.end(); ++it)
             {
-                const TopoDS_Shape& value = faceMap.Find(it->second);
-                if (!value.IsSame(it->second))
-                    it->second = value;
+                if (mapIt.Key().IsSame(it->second)) {
+                    // Note: IsEqual() for some reason does not work
+                    it->second = mapIt.Value();
+                    isModifiedFace = true;
+                }
             }
+            if (!isModifiedFace)
+            {
+                // Catch faces that were not united but whose boundary was changed (probably because
+                // several adjacent faces were united)
+                // See https://sourceforge.net/apps/mantisbt/free-cad/view.php?id=873
+                modifiedShapes.push_back(std::make_pair(mapIt.Key(), mapIt.Value()));
+            }
+        }
+        // Handle edges that were fused. See https://sourceforge.net/apps/mantisbt/free-cad/view.php?id=873
+        TopTools_DataMapOfIntegerListOfShape oldEdges;
+        TopTools_DataMapOfIntegerShape newEdges;
+        edgeFuse.Edges(oldEdges);
+        edgeFuse.ResultEdges(newEdges);
+        TopTools_DataMapIteratorOfDataMapOfIntegerListOfShape edgeMapIt;
+        for (edgeMapIt.Initialize(oldEdges); edgeMapIt.More(); edgeMapIt.Next())
+        {
+            const TopTools_ListOfShape& edges = edgeMapIt.Value();
+            int idx = edgeMapIt.Key();
+            TopTools_ListIteratorOfListOfShape edgeIt;
+            for (edgeIt.Initialize(edges); edgeIt.More(); edgeIt.Next())
+            {
+                modifiedShapes.push_back(std::make_pair(edgeIt.Value(), newEdges(idx)));
+            }
+            // TODO: Handle vertices that have disappeared in the fusion of the edges
         }
     }
     return true;
@@ -724,6 +797,7 @@ void Part::BRepBuilderAPI_RefineModel::Build()
         const TopoDS_Shell& shell = TopoDS::Shell(myShape);
         ModelRefine::FaceUniter uniter(shell);
         if (uniter.process()) {
+            // TODO: Why not check for uniter.isModified()?
             myShape = uniter.getShell();
             LogModifications(uniter);
         }

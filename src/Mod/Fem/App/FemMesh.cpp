@@ -29,7 +29,10 @@
 # include <strstream>
 # include <Bnd_Box.hxx>
 # include <BRepBndLib.hxx>
-# include <BRepAlgo_NormalProjection.hxx>
+# include <BRepExtrema_DistShapeShape.hxx>
+# include <TopoDS_Vertex.hxx>
+# include <BRepBuilderAPI_MakeVertex.hxx>
+# include <gp_Pnt.hxx>
 #endif
 
 #include <Base/Writer.h>
@@ -326,6 +329,7 @@ SMESH_Mesh* FemMesh::getSMesh()
     return myMesh;
 }
 
+
 SMESH_Gen * FemMesh::getGenerator()
 {
     return myGen;
@@ -404,8 +408,37 @@ std::set<long> FemMesh::getSurfaceNodes(const TopoDS_Face &face)const
     std::set<long> result;
     const SMESHDS_Mesh* data = myMesh->GetMeshDS();
 
-    BRepAlgo_NormalProjection algo;
+    Bnd_Box box;
+    BRepBndLib::Add(face, box);
+    // limit where the mesh node belongs to the face:
+    double limit = box.SquareExtent()/10000.0;
+    box.Enlarge(limit);
 
+    // get the actuall transform of the FemMesh
+    const Base::Matrix4D Mtrx(getTransform());
+
+    SMDS_NodeIteratorPtr aNodeIter = myMesh->GetMeshDS()->nodesIterator();
+	for (int i=0;aNodeIter->more();i++) {
+		const SMDS_MeshNode* aNode = aNodeIter->next();
+        Base::Vector3d vec(aNode->X(),aNode->Y(),aNode->Z());
+        // Apply the matrix to hold the BoundBox in absolute space. 
+        vec = Mtrx * vec;
+
+        if(!box.IsOut(gp_Pnt(vec.x,vec.y,vec.z))){
+            // create a Vertex
+            BRepBuilderAPI_MakeVertex aBuilder(gp_Pnt(vec.x,vec.y,vec.z));
+            TopoDS_Shape s = aBuilder.Vertex();
+            // measure distance
+            BRepExtrema_DistShapeShape measure(face,s);
+            measure.Perform();
+            if (!measure.IsDone() || measure.NbSolution() < 1)
+                continue;
+            
+            if(measure.Value() < limit)         
+                result.insert(aNode->GetID());
+
+        }
+	}
 
     return result;
 }
@@ -466,17 +499,28 @@ void FemMesh::readNastran(const std::string &Filename)
 			//we have to take care of that
 			//At a first step we only extract Quadratic Tetrahedral Elements
 			std::getline(inputfile,line2);
-			element_id.push_back(atoi(line1.substr(8,16).c_str()));
+            unsigned int id = atoi(line1.substr(8,16).c_str());
+            int offset = 0;
+
+            if(id < 1000000)
+                offset = 0;
+            else if (id < 10000000)
+                offset = 1;
+            else if (id < 100000000)
+                offset = 2;
+            
+
+			element_id.push_back(id);
 			tetra_element.push_back(atoi(line1.substr(24,32).c_str()));
 			tetra_element.push_back(atoi(line1.substr(32,40).c_str()));
 			tetra_element.push_back(atoi(line1.substr(40,48).c_str()));
 			tetra_element.push_back(atoi(line1.substr(48,56).c_str()));
 			tetra_element.push_back(atoi(line1.substr(56,64).c_str()));
 			tetra_element.push_back(atoi(line1.substr(64,72).c_str()));
-			tetra_element.push_back(atoi(line2.substr(8,16).c_str()));
-			tetra_element.push_back(atoi(line2.substr(16,24).c_str()));
-			tetra_element.push_back(atoi(line2.substr(24,32).c_str()));
-			tetra_element.push_back(atoi(line2.substr(32,40).c_str()));
+			tetra_element.push_back(atoi(line2.substr(8+offset,16+offset).c_str()));
+			tetra_element.push_back(atoi(line2.substr(16+offset,24+offset).c_str()));
+			tetra_element.push_back(atoi(line2.substr(24+offset,32+offset).c_str()));
+			tetra_element.push_back(atoi(line2.substr(32+offset,40+offset).c_str()));
 
 			all_elements.push_back(tetra_element);
 		}
@@ -889,5 +933,107 @@ struct Fem::FemMesh::FemMeshInfo FemMesh::getInfo(void) const{
     rtrn.numHedr = info.NbPolyhedrons();
 
     return rtrn;
+
+}
+//		for(unsigned int i=0;i<all_elements.size();i++)
+//		{
+//			//Die Reihenfolge wie hier die Elemente hinzugefügt werden ist sehr wichtig. 
+//			//Ansonsten ist eine konsistente Datenstruktur nicht möglich
+//			meshds->AddVolumeWithID(
+//				meshds->FindNode(all_elements[i][0]),
+//				meshds->FindNode(all_elements[i][2]),
+//				meshds->FindNode(all_elements[i][1]),
+//				meshds->FindNode(all_elements[i][3]),
+//				meshds->FindNode(all_elements[i][6]),
+//				meshds->FindNode(all_elements[i][5]),
+//				meshds->FindNode(all_elements[i][4]),
+//				meshds->FindNode(all_elements[i][9]),
+//				meshds->FindNode(all_elements[i][7]),
+//				meshds->FindNode(all_elements[i][8]),
+//				element_id[i]
+//			);
+//		}
+
+Base::Quantity FemMesh::getVolume(void)const
+{
+	SMDS_VolumeIteratorPtr aVolIter = myMesh->GetMeshDS()->volumesIterator();
+
+	//Calculate Mesh Volume
+	//For an accurate Volume Calculation of a quadratic Tetrahedron
+	//we have to calculate the Volume of 8 Sub-Tetrahedrons
+	Base::Vector3d a,b,c,a_b_product;
+	double volume = 0.0;
+
+	for (;aVolIter->more();) 
+	{
+        const SMDS_MeshVolume* aVol = aVolIter->next();
+        
+        if ( aVol->NbNodes() != 10 ) continue;
+
+        Base::Vector3d v1(aVol->GetNode(1)->X(),aVol->GetNode(1)->Y(),aVol->GetNode(1)->Z());
+        Base::Vector3d v0(aVol->GetNode(0)->X(),aVol->GetNode(0)->Y(),aVol->GetNode(0)->Z());
+        Base::Vector3d v2(aVol->GetNode(2)->X(),aVol->GetNode(2)->Y(),aVol->GetNode(2)->Z());
+        Base::Vector3d v3(aVol->GetNode(3)->X(),aVol->GetNode(3)->Y(),aVol->GetNode(3)->Z());
+        Base::Vector3d v4(aVol->GetNode(4)->X(),aVol->GetNode(4)->Y(),aVol->GetNode(4)->Z());
+        Base::Vector3d v6(aVol->GetNode(6)->X(),aVol->GetNode(6)->Y(),aVol->GetNode(6)->Z());
+        Base::Vector3d v5(aVol->GetNode(5)->X(),aVol->GetNode(5)->Y(),aVol->GetNode(5)->Z());
+        Base::Vector3d v8(aVol->GetNode(8)->X(),aVol->GetNode(8)->Y(),aVol->GetNode(8)->Z());
+        Base::Vector3d v7(aVol->GetNode(7)->X(),aVol->GetNode(7)->Y(),aVol->GetNode(7)->Z());
+        Base::Vector3d v9(aVol->GetNode(9)->X(),aVol->GetNode(9)->Y(),aVol->GetNode(9)->Z());
+
+
+		//1,5,8,7
+		a = v4 -v0 ;
+		b = v7 -v0 ;
+		c = v6 -v0 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+		//5,9,8,7
+		a = v8 -v4 ;
+		b = v7 -v4 ;
+		c = v6 -v4 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+		//5,2,9,7
+		a = v1 -v4 ;
+		b = v8 -v4 ;
+		c = v6 -v4 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+		//2,6,9,7
+		a = v5 -v1 ;
+		b = v8 -v1 ;
+		c = v6 -v1 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+		//9,6,10,7
+		a = v5 -v8 ;
+		b = v9 -v8 ;
+		c = v6 -v8 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+		//6,3,10,7
+		a = v2 -v5 ;
+		b = v9 -v5 ;
+		c = v6 -v5 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+		//8,9,10,7
+		a = v8 -v7 ;
+		b = v9 -v7 ;
+		c = v6 -v7 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+		//8,9,10,4
+		a = v8 -v7 ;
+		b = v9 -v7 ;
+		c = v3 -v7 ;
+		a_b_product.x = a.y*b.z-b.y*a.z;a_b_product.y = a.z*b.x-b.z*a.x;a_b_product.z = a.x*b.y-b.x*a.y;
+		volume += 1.0/6.0 * fabs((a_b_product.x * c.x)+ (a_b_product.y * c.y)+(a_b_product.z * c.z));
+	
+	}
+
+    return Base::Quantity(volume,Unit::Volume);
+
 
 }

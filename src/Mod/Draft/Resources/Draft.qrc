@@ -5,6 +5,10 @@
         <file>icons/Draft_Apply.svg</file>
         <file>icons/Draft_Arc.svg</file>
         <file>icons/Draft_BSpline.svg</file>
+        <file>icons/Draft_BezCurve.svg</file>
+        <file>icons/Draft_BezSharpNode.svg</file>
+        <file>icons/Draft_BezTanNode.svg</file>
+        <file>icons/Draft_BezSymNode.svg</file>
         <file>icons/Draft_Circle.svg</file>
         <file>icons/Draft_Construction.svg</file>
         <file>icons/Draft_DelPoint.svg</file>
@@ -40,6 +44,8 @@
         <file>icons/Draft_Dot.svg</file>
         <file>icons/Draft_Point.svg</file>
         <file>icons/Draft_Snap.svg</file>
+        <file>icons/Draft_PathArray.svg</file>
+        <file>icons/Draft_Layer.svg</file>
         <file>icons/Snap_Lock.svg</file>
         <file>icons/Snap_Endpoint.svg</file>
         <file>icons/Snap_Midpoint.svg</file>
@@ -53,11 +59,13 @@
         <file>icons/Snap_Ortho.svg</file>
         <file>icons/Snap_Near.svg</file>
         <file>icons/Snap_Dimensions.svg</file>
+        <file>icons/Snap_WorkingPlane.svg</file>
         <file>icons/Draft_Clone.svg</file>
         <file>icons/Draft_Heal.svg</file>
         <file>icons/Draft_Ellipse.svg</file>
         <file>icons/Draft_ShapeString.svg</file>
         <file>icons/Draft_Facebinder.svg</file>
+        <file>icons/Draft_FlipDimension.svg</file>
         <file>patterns/concrete.svg</file>
         <file>patterns/cross.svg</file>
         <file>patterns/line.svg</file>
@@ -87,7 +95,9 @@
         <file>translations/Draft_ro.qm</file>
         <file>translations/Draft_pt-PT.qm</file>
         <file>ui/userprefs-base.ui</file>
-        <file>ui/userprefs-import.ui</file>
+        <file>ui/userprefs-snap.ui</file>
+        <file>ui/userprefs-import1.ui</file>
+        <file>ui/userprefs-import2.ui</file>
         <file>ui/userprefs-visual.ui</file>
     </qresource>
 </RCC> 

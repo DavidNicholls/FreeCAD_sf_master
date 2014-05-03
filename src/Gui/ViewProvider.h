@@ -121,6 +121,7 @@ public:
     /// return a hit element to the selection path or 0
     virtual std::string getElement(const SoDetail *) const { return std::string(); }
     virtual SoDetail* getDetail(const char*) const { return 0; }
+    virtual std::vector<Base::Vector3d> getPickedPoints(const SoPickedPoint *) const;
     /// return the higlight lines for a given element or the whole shape
     virtual std::vector<Base::Vector3d> getSelectionShape(const char* Element) const
     { return std::vector<Base::Vector3d>(); };
@@ -147,6 +148,18 @@ public:
       */
     virtual std::vector<App::DocumentObject*> claimChildren(void) const
     { return std::vector<App::DocumentObject*>(); }
+    /** Check whether children can be removed from the view provider by drag and drop */
+    virtual bool canDragObjects() const
+    { return false; }
+    /** Remove a child from the view provider by drag and drop */
+    virtual void dragObject(App::DocumentObject*)
+    { }
+    /** Check whether objects can be added to the view provider by drag and drop */
+    virtual bool canDropObjects() const
+    { return false; }
+    /** Add an object to the view provider by drag and drop */
+    virtual void dropObject(App::DocumentObject*)
+    { }
     //@}
 
     /** @name Signals of the view provider */
@@ -191,6 +204,8 @@ public:
     virtual bool isShow(void) const;
     void setVisible(bool);
     bool isVisible() const;
+    /// Overrides the display mode with mode.
+    void setOverrideMode(const std::string &mode);
     //@}
 
 
@@ -306,8 +321,10 @@ protected:
     ViewProviderPy* pyViewObject;
 
 private:
+    void setModeSwitch();
     int _iActualMode;
     int _iEditMode;
+    int viewOverrideMode;
     std::string _sCurrentMode;
     std::map<std::string, int> _sDisplayMaskModes;
     bool _updateData;

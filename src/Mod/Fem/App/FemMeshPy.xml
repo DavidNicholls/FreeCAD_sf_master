@@ -89,7 +89,7 @@
         <UserDocu>Get the node position vector by an Node-ID</UserDocu>
       </Documentation>
     </Methode>
-    <Methode Name="getNodesByFace">
+    <Methode Name="getNodesByFace" Const="true">
       <Documentation>
         <UserDocu>Return a list of node IDs which belong to a TopoFace</UserDocu>
       </Documentation>
@@ -179,11 +179,17 @@
 		  </Documentation>
 		  <Parameter Name="SubMeshCount" Type="Int"/>
 	  </Attribute>
-	  <Attribute Name="GroupCount" ReadOnly="true">
-		  <Documentation>
-			  <UserDocu>Number of Groups in the Mesh.</UserDocu>
-		  </Documentation>
-		  <Parameter Name="GroupCount" Type="Int"/>
-	  </Attribute>
+      <Attribute Name="GroupCount" ReadOnly="true">
+          <Documentation>
+              <UserDocu>Number of Groups in the Mesh.</UserDocu>
+          </Documentation>
+          <Parameter Name="GroupCount" Type="Int"/>
+      </Attribute>
+      <Attribute Name="Volume" ReadOnly="true">
+          <Documentation>
+              <UserDocu>Volume of the mesh.</UserDocu>
+          </Documentation>
+          <Parameter Name="Volume" Type="Object"/>
+      </Attribute>
   </PythonExport>
 </GenerateModel>

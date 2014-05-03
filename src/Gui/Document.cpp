@@ -42,6 +42,7 @@
 
 #include <App/Document.h>
 #include <App/DocumentObject.h>
+#include <App/DocumentObjectGroup.h>
 
 #include "Application.h"
 #include "MainWindow.h"
@@ -760,13 +761,13 @@ void Document::SaveDocFile (Base::Writer &writer) const
     std::map<const App::DocumentObject*,ViewProviderDocumentObject*>::const_iterator it;
 
     // writing the view provider names itself
-    writer.incInd(); // indention for 'ViewProviderData Count'
+    writer.incInd(); // indentation for 'ViewProviderData Count'
     writer.Stream() << writer.ind() << "<ViewProviderData Count=\"" 
                     << d->_ViewProviderMap.size() <<"\">" << std::endl;
 
     bool xml = writer.isForceXML();
     //writer.setForceXML(true);
-    writer.incInd(); // indention for 'ViewProvider name'
+    writer.incInd(); // indentation for 'ViewProvider name'
     for(it = d->_ViewProviderMap.begin(); it != d->_ViewProviderMap.end(); ++it) {
         const App::DocumentObject* doc = it->first;
         ViewProvider* obj = it->second;
@@ -779,9 +780,9 @@ void Document::SaveDocFile (Base::Writer &writer) const
     }
     writer.setForceXML(xml);
 
-    writer.decInd(); // indention for 'ViewProvider name'
+    writer.decInd(); // indentation for 'ViewProvider name'
     writer.Stream() << writer.ind() << "</ViewProviderData>" << std::endl;
-    writer.decInd();  // indention for 'ViewProviderData Count'
+    writer.decInd();  // indentation for 'ViewProviderData Count'
 
     // set camera settings
     QString viewPos;
@@ -797,10 +798,10 @@ void Document::SaveDocFile (Base::Writer &writer) const
         }
     }
 
-    writer.incInd(); // indention for camera settings
+    writer.incInd(); // indentation for camera settings
     writer.Stream() << writer.ind() << "<Camera settings=\"" 
                     << (const char*)viewPos.toAscii() <<"\"/>" << std::endl;
-    writer.decInd(); // indention for camera settings
+    writer.decInd(); // indentation for camera settings
     writer.Stream() << "</Document>" << std::endl;
 }
 
@@ -819,13 +820,13 @@ void Document::exportObjects(const std::vector<App::DocumentObject*>& obj, Base:
     }
 
     // writing the view provider names itself
-    writer.incInd(); // indention for 'ViewProviderData Count'
+    writer.incInd(); // indentation for 'ViewProviderData Count'
     writer.Stream() << writer.ind() << "<ViewProviderData Count=\"" 
                     << views.size() <<"\">" << std::endl;
 
     bool xml = writer.isForceXML();
     //writer.setForceXML(true);
-    writer.incInd(); // indention for 'ViewProvider name'
+    writer.incInd(); // indentation for 'ViewProvider name'
     std::map<const App::DocumentObject*,ViewProvider*>::const_iterator jt;
     for (jt = views.begin(); jt != views.end(); ++jt) {
         const App::DocumentObject* doc = jt->first;
@@ -839,12 +840,12 @@ void Document::exportObjects(const std::vector<App::DocumentObject*>& obj, Base:
     }
     writer.setForceXML(xml);
 
-    writer.decInd(); // indention for 'ViewProvider name'
+    writer.decInd(); // indentation for 'ViewProvider name'
     writer.Stream() << writer.ind() << "</ViewProviderData>" << std::endl;
-    writer.decInd();  // indention for 'ViewProviderData Count'
-    writer.incInd(); // indention for camera settings
+    writer.decInd();  // indentation for 'ViewProviderData Count'
+    writer.incInd(); // indentation for camera settings
     writer.Stream() << writer.ind() << "<Camera settings=\"\"/>" << std::endl;
-    writer.decInd(); // indention for camera settings
+    writer.decInd(); // indentation for camera settings
     writer.Stream() << "</Document>" << std::endl;
 }
 
@@ -889,9 +890,49 @@ void Document::importObjects(const std::vector<App::DocumentObject*>& obj, Base:
     xmlReader.readEndElement("Document");
 }
 
+void Document::addRootObjectsToGroup(const std::vector<App::DocumentObject*>& obj, App::DocumentObjectGroup* grp)
+{
+    std::map<App::DocumentObject*, bool> rootMap;
+    for (std::vector<App::DocumentObject*>::const_iterator it = obj.begin(); it != obj.end(); ++it) {
+        rootMap[*it] = true;
+    }
+    // get the view providers and check which objects are children
+    for (std::vector<App::DocumentObject*>::const_iterator it = obj.begin(); it != obj.end(); ++it) {
+        Gui::ViewProvider* vp = getViewProvider(*it);
+        if (vp) {
+            std::vector<App::DocumentObject*> child = vp->claimChildren();
+            for (std::vector<App::DocumentObject*>::iterator jt = child.begin(); jt != child.end(); ++jt) {
+                std::map<App::DocumentObject*, bool>::iterator kt = rootMap.find(*jt);
+                if (kt != rootMap.end()) {
+                    kt->second = false;
+                }
+            }
+        }
+    }
+
+    // all objects that are not children of other objects can be added to the group
+    for (std::map<App::DocumentObject*, bool>::iterator it = rootMap.begin(); it != rootMap.end(); ++it) {
+        if (it->second)
+            grp->addObject(it->first);
+    }
+}
+
 void Document::createView(const char* sType) 
 {
     View3DInventor* view3D = new View3DInventor(this, getMainWindow());
+
+    //get first view override mode and copy
+    std::list<MDIView*> theViews = this->getMDIViews();
+    std::list<MDIView*>::iterator viewIt;
+    for (viewIt = theViews.begin(); viewIt != theViews.end(); ++viewIt)
+    {
+        View3DInventor *tempView = dynamic_cast<View3DInventor *>(*viewIt);
+        if (!tempView)
+            continue;
+        std::string overrideMode = tempView->getViewer()->getOverrideMode();
+        view3D->getViewer()->setOverrideMode(overrideMode);
+        break;
+    }
 
     // attach the viewprovider
     std::map<const App::DocumentObject*,ViewProviderDocumentObject*>::const_iterator It1;
@@ -1111,6 +1152,19 @@ MDIView* Document::getActiveView(void) const
     return active;
 }
 
+Gui::MDIView* Document::getViewOfViewProvider(Gui::ViewProvider* vp) const
+{
+    std::list<MDIView*> mdis = getMDIViews();
+    for (std::list<MDIView*>::const_iterator it = mdis.begin(); it != mdis.end(); ++it) {
+        if ((*it)->getTypeId().isDerivedFrom(View3DInventor::getClassTypeId())) {
+            View3DInventor* view = static_cast<View3DInventor*>(*it);
+            if (view->getViewer()->hasViewProvider(vp))
+                return *it;
+        }
+    }
+
+    return 0;
+}
 
 //--------------------------------------------------------------------------
 // UNDO REDO transaction handling  

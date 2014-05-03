@@ -149,7 +149,8 @@ PyObject*  MeshPy::write(PyObject *args)
 {
     const char* Name;
     char* Ext=0;
-    if (!PyArg_ParseTuple(args, "s|s",&Name,&Ext))
+    char* ObjName=0;
+    if (!PyArg_ParseTuple(args, "s|ss",&Name,&Ext,&ObjName))
         return NULL;
 
     MeshCore::MeshIO::Format format = MeshCore::MeshIO::Undefined;
@@ -161,6 +162,7 @@ PyObject*  MeshPy::write(PyObject *args)
         ext["OBJ" ] = MeshCore::MeshIO::OBJ;
         ext["OFF" ] = MeshCore::MeshIO::OFF;
         ext["IV"  ] = MeshCore::MeshIO::IV;
+        ext["X3D" ] = MeshCore::MeshIO::X3D;
         ext["VRML"] = MeshCore::MeshIO::VRML;
         ext["WRL" ] = MeshCore::MeshIO::VRML;
         ext["WRZ" ] = MeshCore::MeshIO::WRZ;
@@ -174,7 +176,7 @@ PyObject*  MeshPy::write(PyObject *args)
     };
 
     PY_TRY {
-        getMeshObjectPtr()->save(Name, format);
+        getMeshObjectPtr()->save(Name, format, 0, ObjName);
     } PY_CATCH;
     
     Py_Return; 
@@ -1494,6 +1496,11 @@ PyObject*  MeshPy::getSegmentsByCurvature(PyObject *args)
 Py::Int MeshPy::getCountPoints(void) const
 {
     return Py::Int((long)getMeshObjectPtr()->countPoints());
+}
+
+Py::Int MeshPy::getCountEdges(void) const
+{
+    return Py::Int((long)getMeshObjectPtr()->countEdges());
 }
 
 Py::Int MeshPy::getCountFacets(void) const

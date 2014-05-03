@@ -28,8 +28,6 @@
 #include <Gui/Selection.h>
 #include <boost/signals.hpp>
 
-class Ui_TaskSketcherConstrains;
-
 namespace App {
 class Property;
 }
@@ -37,6 +35,24 @@ class Property;
 namespace SketcherGui {
 
 class ViewProviderSketch;
+class Ui_TaskSketcherConstrains;
+
+class ConstraintView : public QListWidget
+{
+    Q_OBJECT
+
+public:
+    explicit ConstraintView(QWidget *parent = 0);
+    ~ConstraintView();
+
+protected:
+    void contextMenuEvent (QContextMenuEvent* event);
+
+protected Q_SLOTS:
+    void modifyCurrentItem();
+    void renameCurrentItem();
+    void deleteSelectedItems();
+};
 
 class TaskSketcherConstrains : public Gui::TaskView::TaskBox, public Gui::SelectionObserver
 {
@@ -49,13 +65,14 @@ public:
     /// Observer message from the Selection
     void onSelectionChanged(const Gui::SelectionChanges& msg);
 
+private:
     void slotConstraintsChanged(void);
 
 public Q_SLOTS:
     void on_comboBoxFilter_currentIndexChanged(int);
     void on_listWidgetConstraints_itemSelectionChanged(void); 
-    void on_listWidgetConstraints_itemActivated(QListWidgetItem *item); 
-    //void on_listWidgetConstraints_entered(const QModelIndex &index); 
+    void on_listWidgetConstraints_itemActivated(QListWidgetItem *item);
+    void on_listWidgetConstraints_itemChanged(QListWidgetItem * item);
 
 protected:
     void changeEvent(QEvent *e);
@@ -65,6 +82,7 @@ protected:
 
 private:
     QWidget* proxy;
+    bool inEditMode;
     Ui_TaskSketcherConstrains* ui;
 };
 

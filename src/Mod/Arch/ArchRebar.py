@@ -21,17 +21,22 @@
 #*                                                                         *
 #***************************************************************************
 
-import FreeCAD,FreeCADGui,Draft,ArchComponent,DraftVecUtils,ArchCommands
+import FreeCAD,Draft,ArchComponent,DraftVecUtils,ArchCommands
 from FreeCAD import Vector
-from PyQt4 import QtCore
-from DraftTools import translate
+if FreeCAD.GuiUp:
+    import FreeCADGui
+    from PySide import QtCore, QtGui
+    from DraftTools import translate
+else:
+    def translate(ctxt,txt):
+        return txt
 
 __title__="FreeCAD Rebar"
 __author__ = "Yorik van Havre"
 __url__ = "http://www.freecadweb.org"
 
     
-def makeRebar(baseobj,sketch,diameter=None,amount=1,offset=None,name="Rebar"):
+def makeRebar(baseobj,sketch,diameter=None,amount=1,offset=None,name=translate("Arch","Rebar")):
     """makeRebar(baseobj,sketch,[diameter,amount,offset,name]): adds a Reinforcement Bar object
     to the given structural object, using the given sketch as profile."""
     p = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Arch")
@@ -83,7 +88,7 @@ class _CommandRebar:
                     sk = sel[1].Object
                     if Draft.getType(sk) == "Sketch":
                         # we have a base object and a sketch: create the rebar now
-                        FreeCAD.ActiveDocument.openTransaction(str(translate("Arch","Create Rebar")))
+                        FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Rebar"))
                         FreeCADGui.doCommand("import Arch")
                         FreeCADGui.doCommand("Arch.makeRebar(FreeCAD.ActiveDocument."+obj.Name+",FreeCAD.ActiveDocument."+sk.Name+")")
                         FreeCAD.ActiveDocument.commitTransaction()
@@ -104,7 +109,7 @@ class _CommandRebar:
                             sup = obj.Support[0]
                         else:
                             sup = obj.Support
-                        FreeCAD.ActiveDocument.openTransaction(str(translate("Arch","Create Rebar")))
+                        FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Rebar"))
                         FreeCADGui.doCommand("import Arch")
                         FreeCADGui.doCommand("Arch.makeRebar(FreeCAD.ActiveDocument."+sup.Name+",FreeCAD.ActiveDocument."+obj.Name+")")
                         FreeCAD.ActiveDocument.commitTransaction()
@@ -114,7 +119,7 @@ class _CommandRebar:
                         print "Arch: error: couldn't extract a base object"
                         return
 
-        FreeCAD.Console.PrintMessage(str(translate("Arch","Please select a base face on a structural object\n")))
+        FreeCAD.Console.PrintMessage(translate("Arch","Please select a base face on a structural object\n"))
         FreeCADGui.Control.showDialog(ArchComponent.SelectionTaskPanel())
         FreeCAD.ArchObserver = ArchComponent.ArchSelectionObserver(nextCommand="Arch_Rebar")
         FreeCADGui.Selection.addObserver(FreeCAD.ArchObserver)
@@ -132,7 +137,7 @@ class _Rebar(ArchComponent.Component):
         obj.addProperty("App::PropertyLength","Spacing","Arch","The spacing between the bars")
         obj.addProperty("App::PropertyVector","Direction","Arch","The direction to use to spread the bars. Keep (0,0,0) for automatic direction.")
         obj.addProperty("App::PropertyFloat","Rounding","Arch","The fillet to apply to the angle of the base profile. This value is multiplied by the bar diameter.")
-        self.Type = "Component"
+        self.Type = "Rebar"
         obj.setEditorMode("Spacing",1)
 
     def getBaseAndAxis(self,obj):
@@ -159,16 +164,16 @@ class _Rebar(ArchComponent.Component):
             return
         if not obj.Base.Shape.Wires:
             return
-        if not obj.Diameter:
+        if not obj.Diameter.Value:
             return
         if not obj.Amount:
             return
         father = obj.InList[0]
         wire = obj.Base.Shape.Wires[0]
         if hasattr(obj,"Rounding"):
-            print obj.Rounding
+            #print obj.Rounding
             if obj.Rounding:
-                radius = obj.Rounding * obj.Diameter
+                radius = obj.Rounding * obj.Diameter.Value
                 import DraftGeomUtils
                 wire = DraftGeomUtils.filletWire(wire,radius)
         bpoint, bvec = self.getBaseAndAxis(obj)
@@ -183,16 +188,16 @@ class _Rebar(ArchComponent.Component):
                 size = axis.Length
         #print axis
         #print size
-        if (obj.OffsetStart+obj.OffsetEnd) > size:
+        if (obj.OffsetStart.Value + obj.OffsetEnd.Value) > size:
             return
 
         # all tests ok!
         pl = obj.Placement
         import Part
-        circle = Part.makeCircle(obj.Diameter/2,bpoint,bvec)
+        circle = Part.makeCircle(obj.Diameter.Value/2,bpoint,bvec)
         circle = Part.Wire(circle)
         try:
-            bar = wire.makePipeShell([circle],1,0,2)
+            bar = wire.makePipeShell([circle],True,False,2)
         except:
             print "Arch: error sweeping rebar profile along the base sketch"
             return
@@ -205,11 +210,11 @@ class _Rebar(ArchComponent.Component):
             if hasattr(obj,"Spacing"):
                 obj.Spacing = 0
         else:
-            if obj.OffsetStart:
-                baseoffset = DraftVecUtils.scaleTo(axis,obj.OffsetStart)
+            if obj.OffsetStart.Value:
+                baseoffset = DraftVecUtils.scaleTo(axis,obj.OffsetStart.Value)
             else:
                 baseoffset = None
-            interval = size - (obj.OffsetStart + obj.OffsetEnd)
+            interval = size - (obj.OffsetStart.Value + obj.OffsetEnd.Value)
             interval = interval / (obj.Amount - 1)
             vinterval = DraftVecUtils.scaleTo(axis,interval)
             for i in range(obj.Amount):
@@ -238,5 +243,5 @@ class _ViewProviderRebar(ArchComponent.ViewProviderComponent):
         import Arch_rc
         return ":/icons/Arch_Rebar_Tree.svg"
 
-
-FreeCADGui.addCommand('Arch_Rebar',_CommandRebar())
+if FreeCAD.GuiUp:
+    FreeCADGui.addCommand('Arch_Rebar',_CommandRebar())

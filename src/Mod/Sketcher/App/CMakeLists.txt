@@ -12,6 +12,7 @@ include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}/..
     ${Boost_INCLUDE_DIRS}
     ${OCC_INCLUDE_DIR}
+    ${QT_QTCORE_INCLUDE_DIR}
     ${ZLIB_INCLUDE_DIR}
     ${PYTHON_INCLUDE_PATH}
     ${XERCESC_INCLUDE_DIR}
@@ -102,6 +103,9 @@ SET(Sketcher_Scripts
     Init.py
     SketcherExample.py
 	TestSketcherApp.py
+	Profiles.py
+	ProfileLib/Hexagon.py
+	ProfileLib/__init__.py
 )
 
 add_library(Sketcher SHARED ${Sketcher_SRCS})
@@ -113,20 +117,10 @@ fc_target_copy_resource(Sketcher
     ${CMAKE_BINARY_DIR}/Mod/Sketcher
     ${Sketcher_Scripts})
 
-if(MSVC)
-    set_target_properties(Sketcher PROPERTIES SUFFIX ".pyd")
-    set_target_properties(Sketcher PROPERTIES DEBUG_OUTPUT_NAME "Sketcher_d")
-    set_target_properties(Sketcher PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Sketcher)
-    set_target_properties(Sketcher PROPERTIES PREFIX "../")
-elseif(MINGW)
-    set_target_properties(Sketcher PROPERTIES SUFFIX ".pyd")
-    set_target_properties(Sketcher PROPERTIES DEBUG_OUTPUT_NAME "Sketcher_d")
-    set_target_properties(Sketcher PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Sketcher)
+SET_BIN_DIR(Sketcher Sketcher /Mod/Sketcher)
+if(WIN32)
     set_target_properties(Sketcher PROPERTIES PREFIX "")
-else(MSVC)
-    set_target_properties(Sketcher PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Sketcher)
-    set_target_properties(Sketcher PROPERTIES PREFIX "")
-    set_target_properties(Sketcher PROPERTIES INSTALL_RPATH ${INSTALL_RPATH})
-endif(MSVC)
+    set_target_properties(Sketcher PROPERTIES SUFFIX ".pyd")
+endif(WIN32)
 
 INSTALL(TARGETS Sketcher DESTINATION lib)

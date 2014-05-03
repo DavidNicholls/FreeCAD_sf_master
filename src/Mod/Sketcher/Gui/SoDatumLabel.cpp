@@ -42,7 +42,7 @@
 # include <Inventor/SoPrimitiveVertex.h>
 # include <Inventor/actions/SoGLRenderAction.h>
 # include <Inventor/misc/SoState.h>
-# include <math.h>
+# include <cmath>
 #endif
 #include <Inventor/actions/SoGetMatrixAction.h>
 #include <Inventor/elements/SoFontNameElement.h>
@@ -77,7 +77,7 @@ SoDatumLabel::SoDatumLabel()
     SO_NODE_ADD_FIELD(norm, (SbVec3f(.0f,.0f,1.f)));
 
     SO_NODE_ADD_FIELD(name, ("Helvetica"));
-    SO_NODE_ADD_FIELD(size, (12.f));
+    SO_NODE_ADD_FIELD(size, (10.f));
     SO_NODE_ADD_FIELD(lineWidth, (2.f));
 
     SO_NODE_ADD_FIELD(datumtype, (SoDatumLabel::DISTANCE));
@@ -91,6 +91,8 @@ SoDatumLabel::SoDatumLabel()
 
     SO_NODE_ADD_FIELD(param1, (0.f));
     SO_NODE_ADD_FIELD(param2, (0.f));
+
+    useAntialiasing = true;
 
     this->imgWidth = 0;
     this->imgHeight = 0;
@@ -127,7 +129,8 @@ void SoDatumLabel::drawImage()
     image.fill(0x00000000);
 
     QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
+    if(useAntialiasing)
+        painter.setRenderHint(QPainter::Antialiasing);
 
     painter.setPen(front);
     painter.setFont(font);
@@ -600,6 +603,12 @@ void SoDatumLabel::GLRender(SoGLRenderAction * action)
         corners.push_back(p2);
         corners.push_back(perp1);
         corners.push_back(perp2);
+
+        // Make sure that the label is inside the bounding box
+        corners.push_back(textOffset + dir * (this->imgWidth / 2 + margin) + norm * (this->imgHeight + margin));
+        corners.push_back(textOffset - dir * (this->imgWidth / 2 + margin) + norm * (this->imgHeight + margin));
+        corners.push_back(textOffset + dir * (this->imgWidth / 2 + margin) - norm * margin);
+        corners.push_back(textOffset - dir * (this->imgWidth / 2 + margin) - norm * margin);
 
         float minX = p1[0], minY = p1[1], maxX = p1[0] , maxY = p1[1];
         for (std::vector<SbVec3f>::const_iterator it=corners.begin(); it != corners.end(); ++it) {

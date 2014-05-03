@@ -539,10 +539,18 @@ void PythonConsole::keyPressEvent(QKeyEvent * e)
 
           case Qt::Key_Period:
           {
-              // analyse context and show available call tips
-              int contextLength = cursor.position() - inputLineBegin.position();
-              TextEdit::keyPressEvent(e);
-              d->callTipsList->showTips( inputStrg.left( contextLength ) );
+              // In Qt 4.8 there is a strange behaviour because when pressing ":"
+              // then key is also set to 'Period' instead of 'Colon'. So we have
+              // to make sure we only handle the period.
+              if (e->text() == QLatin1String(".")) {
+                  // analyse context and show available call tips
+                  int contextLength = cursor.position() - inputLineBegin.position();
+                  TextEdit::keyPressEvent(e);
+                  d->callTipsList->showTips( inputStrg.left( contextLength ) );
+              }
+              else {
+                  TextEdit::keyPressEvent(e);
+              }
           }   break;
 
           case Qt::Key_Home:
@@ -843,6 +851,14 @@ void PythonConsole::changeEvent(QEvent *e)
             connect(dw, SIGNAL(visibilityChanged(bool)),
                     this, SLOT(visibilityChanged(bool)));
         }
+    }
+    else if (e->type() == QEvent::StyleChange) {
+        QPalette pal = palette();
+        QColor color = pal.windowText().color();
+        unsigned long text = (color.red() << 24) | (color.green() << 16) | (color.blue() << 8);
+        // if this parameter is not already set use the style's window text color
+        text = getWindowParameter()->GetUnsigned("Text", text);
+        getWindowParameter()->SetUnsigned("Text", text);
     }
     TextEdit::changeEvent(e);
 }

@@ -167,7 +167,9 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     geom->setCommand("Sketcher geometries");
     *geom << "Sketcher_CreatePoint"
           << "Sketcher_CreateArc"
+          << "Sketcher_Create3PointArc"
           << "Sketcher_CreateCircle"
+          << "Sketcher_Create3PointCircle"
           << "Sketcher_CreateLine"
           << "Sketcher_CreatePolyline"
           << "Sketcher_CreateRectangle"
@@ -221,7 +223,8 @@ Gui::MenuItem* Workbench::setupMenuBar() const
           << "PartDesign_LinearPattern"
           << "PartDesign_PolarPattern"
 //          << "PartDesign_Scaled"
-          << "PartDesign_MultiTransform";
+          << "PartDesign_MultiTransform"
+          << "PartDesign_InvoluteGear";
     // For 0.13 a couple of python packages like numpy, matplotlib and others
     // are not deployed with the installer on Windows. Thus, the WizardShaft is
     // not deployed either hence the check for the existence of the command.
@@ -258,8 +261,8 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     Gui::ToolBarItem* geom = new Gui::ToolBarItem(root);
     geom->setCommand("Sketcher geometries");
     *geom << "Sketcher_CreatePoint"
-          << "Sketcher_CreateArc"
-          << "Sketcher_CreateCircle"
+          << "Sketcher_CompCreateArc"
+          << "Sketcher_CompCreateCircle"
           << "Sketcher_CreateLine"
           << "Sketcher_CreatePolyline"
           << "Sketcher_CreateRectangle"

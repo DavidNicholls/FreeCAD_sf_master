@@ -27,29 +27,52 @@ SET(Import_SRCS
     AppImportPy.cpp
     ImportOCAF.cpp
     ImportOCAF.h
+    StepShapePy.xml
+    StepShape.h
+    StepShape.cpp
+    StepShapePyImp.cpp
     PreCompiled.cpp
     PreCompiled.h
 )
 
+SET(SCL_Resources
+    SCL/__init__.py
+    SCL/AggregationDataTypes.py
+    SCL/BaseType.py
+    SCL/Builtin.py
+    SCL/ConstructedDataTypes.py
+    SCL/essa_par.py
+    SCL/Model.py
+    SCL/Part21.py
+    SCL/Rules.py
+    SCL/SCLBase.py
+    SCL/SimpleDataTypes.py
+    SCL/TypeChecker.py
+    SCL/Utils.py
+    automotive_design.py     # AP214e3
+    ifc2x3.py                # IFC
+    ifc4.py                  # IFC 4
+)
+SOURCE_GROUP("SCL" FILES ${SCL_Resources})
+
+generate_from_xml(StepShapePy)
+
 add_library(Import SHARED ${Import_SRCS})
 target_link_libraries(Import ${Import_LIBS})
 
-if(MSVC)
-    set_target_properties(Import PROPERTIES SUFFIX ".pyd")
-    set_target_properties(Import PROPERTIES DEBUG_OUTPUT_NAME "Import_d")
-    set_target_properties(Import PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Import)
-    set_target_properties(Import PROPERTIES PREFIX "../")
-    # Set special compiler flag to convert a SIGSEV into an exception
-    set_target_properties(Import PROPERTIES COMPILE_FLAGS "/EHa")
-elseif(MINGW)
-    set_target_properties(Import PROPERTIES SUFFIX ".pyd")
-    set_target_properties(Import PROPERTIES DEBUG_OUTPUT_NAME "Import_d")
-    set_target_properties(Import PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Import)
+ADD_CUSTOM_TARGET(ImportPy ALL
+    SOURCES ${SCL_Resources}
+)
+
+fc_target_copy_resource(ImportPy 
+    ${CMAKE_SOURCE_DIR}/src/Mod/Import/App
+    ${CMAKE_BINARY_DIR}/Mod/Import
+    ${SCL_Resources})
+
+SET_BIN_DIR(Import Import /Mod/Import)
+if(WIN32)
     set_target_properties(Import PROPERTIES PREFIX "")
-else(MSVC)
-    set_target_properties(Import PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Import)
-    set_target_properties(Import PROPERTIES PREFIX "")
-    set_target_properties(Import PROPERTIES INSTALL_RPATH ${INSTALL_RPATH})
-endif(MSVC)
+    set_target_properties(Import PROPERTIES SUFFIX ".pyd")
+endif(WIN32)
 
 INSTALL(TARGETS Import DESTINATION lib)

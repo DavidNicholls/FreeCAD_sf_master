@@ -24,8 +24,10 @@
 #include "PreCompiled.h"
 
 #ifndef _PreComp_
+# include <cmath>
 # include <cstdlib>
 # include <sstream>
+# include <QString>
 # include <BRepLib.hxx>
 # include <BSplCLib.hxx>
 # include <Bnd_Box.hxx>
@@ -49,6 +51,7 @@
 # include <BRepBuilderAPI_MakeSolid.hxx>
 # include <BRepBuilderAPI_MakeVertex.hxx>
 # include <BRepBuilderAPI_MakeWire.hxx>
+# include <BRepBuilderAPI_MakeShell.hxx>
 # include <BRepBuilderAPI_NurbsConvert.hxx>
 # include <BRepBuilderAPI_FaceError.hxx>
 # include <BRepBuilderAPI_Copy.hxx>
@@ -72,6 +75,7 @@
 # include <BRepTools.hxx>
 # include <BRepTools_ReShape.hxx>
 # include <BRepTools_ShapeSet.hxx>
+#include <BRepFill_CompatibleWires.hxx>
 # include <GCE2d_MakeSegment.hxx>
 # include <Geom2d_Line.hxx>
 # include <Geom2d_TrimmedCurve.hxx>
@@ -152,6 +156,8 @@
 #include <Base/FileInfo.h>
 #include <Base/Exception.h>
 #include <Base/Tools.h>
+#include <Base/Console.h>
+
 
 #include "TopoShape.h"
 #include "CrossSection.h"
@@ -562,7 +568,8 @@ void TopoShape::importIges(const char *FileName)
         IGESControl_Controller::Init();
         Interface_Static::SetIVal("read.surfacecurve.mode",3);
         IGESControl_Reader aReader;
-        if (aReader.ReadFile((const Standard_CString)FileName) != IFSelect_RetDone)
+        QString fn = QString::fromUtf8(FileName);
+        if (aReader.ReadFile((const char*)fn.toLocal8Bit()) != IFSelect_RetDone)
             throw Base::Exception("Error in reading IGES");
 
         Handle_Message_ProgressIndicator pi = new ProgressIndicator(100);
@@ -587,7 +594,8 @@ void TopoShape::importStep(const char *FileName)
 {
     try {
         STEPControl_Reader aReader;
-        if (aReader.ReadFile((const Standard_CString)FileName) != IFSelect_RetDone)
+        QString fn = QString::fromUtf8(FileName);
+        if (aReader.ReadFile((const char*)fn.toLocal8Bit()) != IFSelect_RetDone)
             throw Base::Exception("Error in reading STEP");
 
         Handle_Message_ProgressIndicator pi = new ProgressIndicator(100);
@@ -617,7 +625,8 @@ void TopoShape::importBrep(const char *FileName)
         Handle_Message_ProgressIndicator pi = new ProgressIndicator(100);
         pi->NewScope(100, "Reading BREP file...");
         pi->Show();
-        BRepTools::Read(aShape,(const Standard_CString)FileName,aBuilder,pi);
+        QString fn = QString::fromUtf8(FileName);
+        BRepTools::Read(aShape,(const char*)fn.toLocal8Bit(),aBuilder,pi);
         pi->EndScope();
     #else
         BRepTools::Read(aShape,(const Standard_CString)FileName,aBuilder);
@@ -673,7 +682,7 @@ void TopoShape::write(const char *FileName) const
     }
     else if (File.hasExtension("stl")) {
         // read brep-file
-        exportStl(File.filePath().c_str());
+        exportStl(File.filePath().c_str(),0);
     }
     else{
         throw Base::Exception("Unknown extension");
@@ -690,7 +699,8 @@ void TopoShape::exportIges(const char *filename) const
         //IGESControl_Writer aWriter(Interface_Static::CVal("write.iges.unit"), 1);
         aWriter.AddShape(this->_Shape);
         aWriter.ComputeModel();
-        if (aWriter.Write((const Standard_CString)filename) != IFSelect_RetDone)
+        QString fn = QString::fromUtf8(filename);
+        if (aWriter.Write((const char*)fn.toLocal8Bit()) != IFSelect_RetDone)
             throw Base::Exception("Writing of IGES failed");
     }
     catch (Standard_Failure) {
@@ -720,7 +730,8 @@ void TopoShape::exportStep(const char *filename) const
         makeHeader.SetOriginatingSystem(new TCollection_HAsciiString("FreeCAD"));
         makeHeader.SetDescriptionValue(1, new TCollection_HAsciiString("FreeCAD Model"));
 
-        if (aWriter.Write((const Standard_CString)filename) != IFSelect_RetDone)
+        QString fn = QString::fromUtf8(filename);
+        if (aWriter.Write((const char*)fn.toLocal8Bit()) != IFSelect_RetDone)
             throw Base::Exception("Writing of STEP failed");
         pi->EndScope();
     }
@@ -732,21 +743,30 @@ void TopoShape::exportStep(const char *filename) const
 
 void TopoShape::exportBrep(const char *filename) const
 {
-    if (!BRepTools::Write(this->_Shape,(const Standard_CString)filename))
+    QString fn = QString::fromUtf8(filename);
+    if (!BRepTools::Write(this->_Shape,(const char*)fn.toLocal8Bit()))
         throw Base::Exception("Writing of BREP failed");
 }
 
-void TopoShape::exportBrep(std::ostream& out)
+void TopoShape::exportBrep(std::ostream& out) const
 {
     BRepTools::Write(this->_Shape, out);
 }
 
-void TopoShape::exportStl(const char *filename) const
+void TopoShape::dump(std::ostream& out) const
+{
+    BRepTools::Dump(this->_Shape, out);
+}
+
+void TopoShape::exportStl(const char *filename, double deflection) const
 {
     StlAPI_Writer writer;
-    //writer.RelativeMode() = false;
-    //writer.SetDeflection(0.1);
-    writer.Write(this->_Shape,(const Standard_CString)filename);
+    if (deflection > 0) {
+        writer.RelativeMode() = false;
+        writer.SetDeflection(deflection);
+    }
+    QString fn = QString::fromUtf8(filename);
+    writer.Write(this->_Shape,(const Standard_CString)fn.toLocal8Bit());
 }
 
 void TopoShape::exportFaceSet(double dev, double ca, std::ostream& str) const
@@ -997,12 +1017,13 @@ unsigned int TopoShape::getMemSize (void) const
                         break;
                     case GeomAbs_BezierSurface:
                         memsize += sizeof(Geom_BezierSurface);
-                        memsize += (surface.NbUKnots()+surface.NbVKnots()) * sizeof(Standard_Real);
+                        memsize += (surface.NbUPoles()*surface.NbVPoles()) * sizeof(Standard_Real);
                         memsize += (surface.NbUPoles()*surface.NbVPoles()) * sizeof(Geom_CartesianPoint);
                         break;
                     case GeomAbs_BSplineSurface:
                         memsize += sizeof(Geom_BSplineSurface);
                         memsize += (surface.NbUKnots()+surface.NbVKnots()) * sizeof(Standard_Real);
+                        memsize += (surface.NbUPoles()*surface.NbVPoles()) * sizeof(Standard_Real);
                         memsize += (surface.NbUPoles()*surface.NbVPoles()) * sizeof(Geom_CartesianPoint);
                         break;
                     case GeomAbs_SurfaceOfRevolution:
@@ -1044,12 +1065,13 @@ unsigned int TopoShape::getMemSize (void) const
                         break;
                     case GeomAbs_BezierCurve:
                         memsize += sizeof(Geom_BezierCurve);
-                        memsize += curve.NbKnots() * sizeof(Standard_Real);
+                        memsize += curve.NbPoles() * sizeof(Standard_Real);
                         memsize += curve.NbPoles() * sizeof(Geom_CartesianPoint);
                         break;
                     case GeomAbs_BSplineCurve:
                         memsize += sizeof(Geom_BSplineCurve);
                         memsize += curve.NbKnots() * sizeof(Standard_Real);
+                        memsize += curve.NbPoles() * sizeof(Standard_Real);
                         memsize += curve.NbPoles() * sizeof(Geom_CartesianPoint);
                         break;
                     case GeomAbs_OtherCurve:
@@ -1275,30 +1297,50 @@ bool TopoShape::isClosed() const
 
 TopoDS_Shape TopoShape::cut(TopoDS_Shape shape) const
 {
+    if (this->_Shape.IsNull())
+        Standard_Failure::Raise("Base shape is null");
+    if (shape.IsNull())
+        Standard_Failure::Raise("Tool shape is null");
     BRepAlgoAPI_Cut mkCut(this->_Shape, shape);
     return mkCut.Shape();
 }
 
 TopoDS_Shape TopoShape::common(TopoDS_Shape shape) const
 {
+    if (this->_Shape.IsNull())
+        Standard_Failure::Raise("Base shape is null");
+    if (shape.IsNull())
+        Standard_Failure::Raise("Tool shape is null");
     BRepAlgoAPI_Common mkCommon(this->_Shape, shape);
     return mkCommon.Shape();
 }
 
 TopoDS_Shape TopoShape::fuse(TopoDS_Shape shape) const
 {
+    if (this->_Shape.IsNull())
+        Standard_Failure::Raise("Base shape is null");
+    if (shape.IsNull())
+        Standard_Failure::Raise("Tool shape is null");
     BRepAlgoAPI_Fuse mkFuse(this->_Shape, shape);
     return mkFuse.Shape();
 }
 
 TopoDS_Shape TopoShape::oldFuse(TopoDS_Shape shape) const
 {
+    if (this->_Shape.IsNull())
+        Standard_Failure::Raise("Base shape is null");
+    if (shape.IsNull())
+        Standard_Failure::Raise("Tool shape is null");
     BRepAlgo_Fuse mkFuse(this->_Shape, shape);
     return mkFuse.Shape();
 }
 
 TopoDS_Shape TopoShape::section(TopoDS_Shape shape) const
 {
+    if (this->_Shape.IsNull())
+        Standard_Failure::Raise("Base shape is null");
+    if (shape.IsNull())
+        Standard_Failure::Raise("Tool shape is null");
     BRepAlgoAPI_Section mkSection(this->_Shape, shape);
     return mkSection.Shape();
 }
@@ -1543,7 +1585,8 @@ TopoDS_Shape TopoShape::makeSweep(const TopoDS_Shape& profile, double tol, int f
 
 TopoDS_Shape TopoShape::makeHelix(Standard_Real pitch, Standard_Real height,
                                   Standard_Real radius, Standard_Real angle,
-                                  Standard_Boolean leftHanded) const
+                                  Standard_Boolean leftHanded,
+                                  Standard_Boolean newStyle) const
 {
     if (pitch < Precision::Confusion())
         Standard_Failure::Raise("Pitch of helix too small");
@@ -1578,19 +1621,109 @@ TopoDS_Shape TopoShape::makeHelix(Standard_Real pitch, Standard_Real height,
     Handle(Geom2d_Line) line = new Geom2d_Line(aAx2d);
     gp_Pnt2d beg = line->Value(0);
     gp_Pnt2d end = line->Value(sqrt(4.0*M_PI*M_PI+pitch*pitch)*(height/pitch));
-#if 0 // See discussion at 0001247: Part Conical Helix Height/Pitch Incorrect
-    if (angle >= Precision::Confusion()) {
-        // calculate end point for conical helix
-        Standard_Real v = height / cos(angle);
-        Standard_Real u = (height/pitch) * 2.0 * M_PI;
-        gp_Pnt2d cend(u, v);
-        end = cend;
+
+    if (newStyle) {
+        // See discussion at 0001247: Part Conical Helix Height/Pitch Incorrect
+        if (angle >= Precision::Confusion()) {
+            // calculate end point for conical helix
+            Standard_Real v = height / cos(angle);
+            Standard_Real u = (height/pitch) * 2.0 * M_PI;
+            gp_Pnt2d cend(u, v);
+            end = cend;
+        }
     }
-#endif
+
     Handle(Geom2d_TrimmedCurve) segm = GCE2d_MakeSegment(beg , end);
 
     TopoDS_Edge edgeOnSurf = BRepBuilderAPI_MakeEdge(segm , surf);
     TopoDS_Wire wire = BRepBuilderAPI_MakeWire(edgeOnSurf);
+    BRepLib::BuildCurves3d(wire);
+    return wire;
+}
+
+//***********
+// makeLongHelix is a workaround for an OCC problem found in helices with more than
+// some magic number of turns.  See Mantis #0954.
+//***********
+TopoDS_Shape TopoShape::makeLongHelix(Standard_Real pitch, Standard_Real height,
+                                      Standard_Real radius, Standard_Real angle,
+                                      Standard_Boolean leftHanded) const
+{
+    if (pitch < Precision::Confusion())
+        Standard_Failure::Raise("Pitch of helix too small");
+
+    if (height < Precision::Confusion())
+        Standard_Failure::Raise("Height of helix too small");
+
+    gp_Ax2 cylAx2(gp_Pnt(0.0,0.0,0.0) , gp::DZ());
+    Handle_Geom_Surface surf;
+    Standard_Boolean isCylinder;
+
+    if (angle < Precision::Confusion()) {                                      // Cylindrical helix
+        if (radius < Precision::Confusion())
+            Standard_Failure::Raise("Radius of helix too small");
+        surf= new Geom_CylindricalSurface(cylAx2, radius);
+        isCylinder = true;
+    }
+    else {                                                                     // Conical helix
+        angle = Base::toRadians(angle);
+        if (angle < Precision::Confusion())
+            Standard_Failure::Raise("Angle of helix too small");
+        surf = new Geom_ConicalSurface(gp_Ax3(cylAx2), angle, radius);
+        isCylinder = false;
+    }
+
+    Standard_Real turns = height/pitch;
+    unsigned long wholeTurns = floor(turns);
+    Standard_Real partTurn = turns - wholeTurns;
+
+    gp_Pnt2d aPnt(0, 0);
+    gp_Dir2d aDir(2. * M_PI, pitch);
+    Standard_Real coneDir = 1.0;
+    if (leftHanded) {
+        aPnt.SetCoord(2. * M_PI, 0.0);
+        aDir.SetCoord(-2. * M_PI, pitch);
+        coneDir = -1.0;
+    }
+    gp_Ax2d aAx2d(aPnt, aDir);
+    Handle(Geom2d_Line) line = new Geom2d_Line(aAx2d);
+    gp_Pnt2d beg = line->Value(0);
+    gp_Pnt2d end;
+    Standard_Real u,v;
+    BRepBuilderAPI_MakeWire mkWire;
+    Handle(Geom2d_TrimmedCurve) segm;
+    TopoDS_Edge edgeOnSurf;
+
+    for (unsigned long i = 0; i < wholeTurns; i++) {
+        if (isCylinder) {
+            end = line->Value(sqrt(4.0*M_PI*M_PI+pitch*pitch)*(i+1));
+        }
+        else {
+            u = coneDir * (i+1) * 2.0 * M_PI;
+            v = ((i+1) * pitch) / cos(angle);
+            end = gp_Pnt2d(u, v);
+        }
+        segm = GCE2d_MakeSegment(beg , end);
+        edgeOnSurf = BRepBuilderAPI_MakeEdge(segm , surf);
+        mkWire.Add(edgeOnSurf);
+        beg = end;
+    }
+
+    if (partTurn > Precision::Confusion()) {
+        if (isCylinder) {
+            end = line->Value(sqrt(4.0*M_PI*M_PI+pitch*pitch)*turns);
+        }
+        else {
+            u = coneDir * turns * 2.0 * M_PI;
+            v = height / cos(angle);
+            end = gp_Pnt2d(u, v);
+        }
+        segm = GCE2d_MakeSegment(beg , end);
+        edgeOnSurf = BRepBuilderAPI_MakeEdge(segm , surf);
+        mkWire.Add(edgeOnSurf);
+    }
+
+    TopoDS_Wire wire = mkWire.Wire();
     BRepLib::BuildCurves3d(wire);
     return wire;
 }
@@ -1659,13 +1792,14 @@ TopoDS_Shape TopoShape::makeThread(Standard_Real pitch,
 
 TopoDS_Shape TopoShape::makeLoft(const TopTools_ListOfShape& profiles, 
                                  Standard_Boolean isSolid,
-                                 Standard_Boolean isRuled) const
+                                 Standard_Boolean isRuled,
+                                 Standard_Boolean isClosed) const
 {
     // http://opencascade.blogspot.com/2010/01/surface-modeling-part5.html
     BRepOffsetAPI_ThruSections aGenerator (isSolid,isRuled);
 
-    int countShapes = 0;
     TopTools_ListIteratorOfListOfShape it;
+    int countShapes = 0;
     for (it.Initialize(profiles); it.More(); it.Next()) {
         const TopoDS_Shape& item = it.Value();
         if (!item.IsNull() && item.ShapeType() == TopAbs_VERTEX) {
@@ -1683,15 +1817,44 @@ TopoDS_Shape TopoShape::makeLoft(const TopTools_ListOfShape& profiles,
         }
     }
 
-    if (countShapes < 2)
-        Standard_Failure::Raise("Need at least two vertices, edges or wires to create loft face");
+    if (countShapes < 2) {
+        Standard_Failure::Raise("Need at least two vertices, edges or wires to create loft face"); }
+    else {
+        // close loft by duplicating initial profile as last profile.  not perfect. 
+        if (isClosed) {
+        /* can only close loft in certain combinations of Vertex/Wire(Edge):
+            - V1-W1-W2-W3-V2  ==> V1-W1-W2-W3-V2-V1  invalid closed
+            - V1-W1-W2-W3     ==> V1-W1-W2-W3-V1     valid closed
+            - W1-W2-W3-V1     ==> W1-W2-W3-V1-W1     invalid closed
+            - W1-W2-W3        ==> W1-W2-W3-W1        valid closed*/
+            if (profiles.Last().ShapeType() == TopAbs_VERTEX)  {
+                Base::Console().Message("TopoShape::makeLoft: can't close Loft with Vertex as last profile. 'Closed' ignored.\n"); }
+            else {
+                // repeat Add logic above for first profile
+                const TopoDS_Shape& firstProfile = profiles.First();
+                if (firstProfile.ShapeType() == TopAbs_VERTEX)  {
+                    aGenerator.AddVertex(TopoDS::Vertex (firstProfile));
+                    countShapes++;
+                }
+                else if (firstProfile.ShapeType() == TopAbs_EDGE)  {
+                 aGenerator.AddWire(TopoDS::Wire (firstProfile));
+                 countShapes++;
+                }
+                else if (firstProfile.ShapeType() == TopAbs_WIRE)  {
+                 aGenerator.AddWire(TopoDS::Wire (firstProfile));
+                 countShapes++;
+                }
+            }     
+        }
+    }
 
     Standard_Boolean anIsCheck = Standard_True;
-    aGenerator.CheckCompatibility (anIsCheck);
+    aGenerator.CheckCompatibility (anIsCheck);   // use BRepFill_CompatibleWires on profiles. force #edges, orientation, "origin" to match.
     aGenerator.Build();
     if (!aGenerator.IsDone())
         Standard_Failure::Raise("Failed to create loft face");
-
+    
+    //Base::Console().Message("DEBUG: TopoShape::makeLoft returns.\n");
     return aGenerator.Shape();
 }
 
@@ -1702,10 +1865,41 @@ TopoDS_Shape TopoShape::makePrism(const gp_Vec& vec) const
     return mkPrism.Shape();
 }
 
-TopoDS_Shape TopoShape::revolve(const gp_Ax1& axis, double d) const
+TopoDS_Shape TopoShape::revolve(const gp_Ax1& axis, double d, Standard_Boolean isSolid) const
 {
-    if (this->_Shape.IsNull()) Standard_Failure::Raise("cannot sweep empty shape");
-    BRepPrimAPI_MakeRevol mkRevol(this->_Shape, axis,d);
+    if (this->_Shape.IsNull()) Standard_Failure::Raise("cannot revolve empty shape");
+
+    TopoDS_Face f; 
+    TopoDS_Wire w;
+    TopoDS_Edge e;
+    Standard_Boolean convertFailed = false;
+
+    TopoDS_Shape base = this->_Shape; 
+    if ((isSolid) && (BRep_Tool::IsClosed(base)) &&
+        ((base.ShapeType() == TopAbs_EDGE) || (base.ShapeType() == TopAbs_WIRE))) {
+        if (base.ShapeType() == TopAbs_EDGE) {
+            BRepBuilderAPI_MakeWire mkWire(TopoDS::Edge(base));
+            if (mkWire.IsDone()) {
+                w = mkWire.Wire(); }
+            else {
+                convertFailed = true; }
+        }
+        else {
+             w = TopoDS::Wire(base);}
+        if (!convertFailed) {       
+            BRepBuilderAPI_MakeFace mkFace(w);
+            if (mkFace.IsDone()) {
+                f = mkFace.Face(); 
+                base = f; }
+            else {
+                convertFailed = true; }
+        }  
+    }        
+    
+    if (convertFailed) {
+        Base::Console().Message("TopoShape::revolve could not make Solid from Wire/Edge.\n");}
+
+    BRepPrimAPI_MakeRevol mkRevol(base, axis,d);
     return mkRevol.Shape();
 }
 
@@ -1819,6 +2013,9 @@ void TopoShape::transformGeometry(const Base::Matrix4D &rclMat)
 
 TopoDS_Shape TopoShape::transformGShape(const Base::Matrix4D& rclTrf) const
 {
+    if (this->_Shape.IsNull())
+        Standard_Failure::Raise("Cannot transform null shape");
+
     gp_GTrsf mat;
     mat.SetValue(1,1,rclTrf[0][0]);
     mat.SetValue(2,1,rclTrf[1][0]);
@@ -1840,6 +2037,9 @@ TopoDS_Shape TopoShape::transformGShape(const Base::Matrix4D& rclTrf) const
 
 void TopoShape::transformShape(const Base::Matrix4D& rclTrf, bool copy)
 {
+    if (this->_Shape.IsNull())
+        Standard_Failure::Raise("Cannot transform null shape");
+
     gp_Trsf mat;
     mat.SetValues(rclTrf[0][0],rclTrf[0][1],rclTrf[0][2],rclTrf[0][3],
                   rclTrf[1][0],rclTrf[1][1],rclTrf[1][2],rclTrf[1][3],

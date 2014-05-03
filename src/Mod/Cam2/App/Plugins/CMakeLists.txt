@@ -6,5 +6,5 @@ add_subdirectory(TestPlugin)
 
 # Tpg library that parses and post-processes
 # the output of another Tpg library
-add_subdirectory(InverseKinematicPlugin)
+# add_subdirectory(InverseKinematicPlugin)
 

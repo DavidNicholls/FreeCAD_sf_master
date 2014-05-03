@@ -34,6 +34,8 @@
 # include <BRepAdaptor_Curve.hxx>
 # include <BRep_Tool.hxx>
 # include <Geom_Plane.hxx>
+# include <Geom_Circle.hxx>
+# include <Geom_TrimmedCurve.hxx>
 # include <GeomAPI_ProjectPointOnSurf.hxx>
 # include <BRepOffsetAPI_NormalProjection.hxx>
 # include <BRepBuilderAPI_MakeFace.hxx>
@@ -96,7 +98,15 @@ App::DocumentObjectExecReturn *SketchObject::execute(void)
     }
 
     // setup and diagnose the sketch
-    rebuildExternalGeometry();
+    try {
+        rebuildExternalGeometry();
+    }
+    catch (const Base::Exception& e) {
+        Base::Console().Error("%s\nClear constraints to external geometry\n", e.what());
+        // we cannot trust the constraints of external geometries, so remove them
+        delConstraintsToExternal();
+    }
+
     Sketch sketch;
     int dofs = sketch.setUpSketch(getCompleteGeometry(), Constraints.getValues(),
                                   getExternalGeometryCount());
@@ -1175,6 +1185,24 @@ int SketchObject::delExternal(int ExtGeoId)
     return 0;
 }
 
+int SketchObject::delConstraintsToExternal()
+{
+    const std::vector< Constraint * > &constraints = Constraints.getValues();
+    std::vector< Constraint * > newConstraints(0);
+    int GeoId = -3, NullId = -2000;
+    for (std::vector<Constraint *>::const_iterator it = constraints.begin();
+         it != constraints.end(); ++it) {
+        if ((*it)->First > GeoId && ((*it)->Second > GeoId || (*it)->Second == NullId) && ((*it)->Third > GeoId || (*it)->Third == NullId)) {
+            newConstraints.push_back(*it);
+        }
+    }
+
+    Constraints.setValues(newConstraints);
+    Constraints.acceptGeometry(getCompleteGeometry());
+
+    return 0;
+}
+
 const Part::Geometry* SketchObject::getGeometry(int GeoId) const
 {
     if (GeoId >= 0) {
@@ -1336,14 +1364,10 @@ void SketchObject::rebuildExternalGeometry(void)
                                     }
                                     else {
                                         Part::GeomArcOfCircle* arc = new Part::GeomArcOfCircle();
-                                        arc->setRadius(c.Radius());
-                                        arc->setCenter(Base::Vector3d(p.X(),p.Y(),p.Z()));
-                                        if (c.Axis().Direction().Z() < 0) // clockwise
-                                            arc->setRange(2*M_PI - projCurve.LastParameter(),
-                                                          2*M_PI - projCurve.FirstParameter());
-                                        else // counter-clockwise
-                                            arc->setRange(projCurve.FirstParameter(), projCurve.LastParameter());
-
+                                        Handle_Geom_Curve curve = new Geom_Circle(c);
+                                        Handle_Geom_TrimmedCurve tCurve = new Geom_TrimmedCurve(curve, projCurve.FirstParameter(),
+                                                                                                projCurve.LastParameter());
+                                        arc->setHandle(tCurve);
                                         arc->Construction = true;
                                         ExternalGeo.push_back(arc);
                                     }
@@ -1462,6 +1486,25 @@ void SketchObject::getCoincidentPoints(int VertexId, std::vector<int> &GeoIdList
     getCoincidentPoints(GeoId, PosId, GeoIdList, PosIdList);
 }
 
+bool SketchObject::arePointsCoincident(int GeoId1, PointPos PosId1,
+                                       int GeoId2, PointPos PosId2)
+{
+    if (GeoId1 == GeoId2 && PosId1 == PosId2)
+        return true;
+
+    const std::vector<Constraint *> &constraints = this->Constraints.getValues();
+    for (std::vector<Constraint *>::const_iterator it=constraints.begin();
+         it != constraints.end(); ++it) {
+        if ((*it)->Type == Sketcher::Coincident)
+            if (((*it)->First == GeoId1 && (*it)->FirstPos == PosId1 &&
+                 (*it)->Second == GeoId2 && (*it)->SecondPos == PosId2) ||
+                ((*it)->First == GeoId2 && (*it)->FirstPos == PosId2 &&
+                 (*it)->Second == GeoId1 && (*it)->SecondPos == PosId1))
+                return true;
+    }
+    return false;
+}
+
 void SketchObject::appendConflictMsg(const std::vector<int> &conflicting, std::string &msg)
 {
     std::stringstream ss;
@@ -1526,8 +1569,28 @@ void SketchObject::Restore(XMLReader &reader)
 
 void SketchObject::onChanged(const App::Property* prop)
 {
-    if (prop == &Geometry || prop == &Constraints)
+    if (prop == &Geometry || prop == &Constraints) {
         Constraints.checkGeometry(getCompleteGeometry());
+    }
+    else if (prop == &ExternalGeometry) {
+        // make sure not to change anything while restoring this object
+        if (!isRestoring()) {
+            // external geometry was cleared
+            if (ExternalGeometry.getSize() == 0) {
+                delConstraintsToExternal();
+            }
+        }
+    }
+    else if (prop == &Support) {
+        // make sure not to change anything while restoring this object
+        if (!isRestoring()) {
+            // if support face has changed then clear the external geometry
+            delConstraintsToExternal();
+            for (int i=0; i < getExternalGeometryCount(); i++) {
+                delExternal(0);
+            }
+        }
+    }
     Part::Part2DObject::onChanged(prop);
 }
 

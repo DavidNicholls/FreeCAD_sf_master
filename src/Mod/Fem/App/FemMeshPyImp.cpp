@@ -30,10 +30,12 @@
 
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS.hxx>
 
 #include <Base/VectorPy.h>
 #include <Base/MatrixPy.h>
 #include <Base/PlacementPy.h>
+#include <Base/QuantityPy.h>
 
 #include <Mod/Part/App/TopoShapePy.h>
 #include <Mod/Part/App/TopoShapeFacePy.h>
@@ -180,21 +182,42 @@ PyObject* FemMeshPy::compute(PyObject *args)
 PyObject* FemMeshPy::addNode(PyObject *args)
 {
     double x,y,z;
-    if (!PyArg_ParseTuple(args, "ddd",&x,&y,&z))
-        return 0;
+    int i = -1;
+    if (PyArg_ParseTuple(args, "ddd",&x,&y,&z)){
+        try {
+            SMESH_Mesh* mesh = getFemMeshPtr()->getSMesh();
+            SMESHDS_Mesh* meshDS = mesh->GetMeshDS();
+            SMDS_MeshNode* node = meshDS->AddNode(x,y,z);
+            if (!node)
+                throw std::runtime_error("Failed to add node");
+            return Py::new_reference_to(Py::Int(node->GetID()));
+        }
+        catch (const std::exception& e) {
+            PyErr_SetString(PyExc_Exception, e.what());
+            return 0;
+        }
+    }
+    PyErr_Clear();
 
-    try {
-        SMESH_Mesh* mesh = getFemMeshPtr()->getSMesh();
-        SMESHDS_Mesh* meshDS = mesh->GetMeshDS();
-        SMDS_MeshNode* node = meshDS->AddNode(x,y,z);
-        if (!node)
-            throw std::runtime_error("Failed to add node");
-        return Py::new_reference_to(Py::Int(node->GetID()));
+    if (PyArg_ParseTuple(args, "dddi",&x,&y,&z,&i)){
+        try {
+            SMESH_Mesh* mesh = getFemMeshPtr()->getSMesh();
+            SMESHDS_Mesh* meshDS = mesh->GetMeshDS();
+            SMDS_MeshNode* node = meshDS->AddNodeWithID(x,y,z,i);
+            if (!node)
+                throw std::runtime_error("Failed to add node");
+            return Py::new_reference_to(Py::Int(node->GetID()));
+        }
+        catch (const std::exception& e) {
+            PyErr_SetString(PyExc_Exception, e.what());
+            return 0;
+        }
     }
-    catch (const std::exception& e) {
-        PyErr_SetString(PyExc_Exception, e.what());
-        return 0;
-    }
+    PyErr_SetString(PyExc_TypeError, "addNode() accepts:\n"
+        "-- addNode(x,y,z)\n"
+        "-- addNode(x,y,z,ElemId)\n");
+    return 0;
+
 }
 
 PyObject* FemMeshPy::addEdge(PyObject *args)
@@ -355,24 +378,47 @@ PyObject* FemMeshPy::addVolume(PyObject *args)
         }
         
         SMDS_MeshVolume* vol=0;
-        switch(Nodes.size()){
-            case 4:
-                vol = meshDS->AddVolume(Nodes[0],Nodes[1],Nodes[2],Nodes[3]);
-                if (!vol)
-                    throw std::runtime_error("Failed to add Tet4 volume");
-                break;
-            case 8:
-                vol = meshDS->AddVolume(Nodes[0],Nodes[1],Nodes[2],Nodes[3],Nodes[4],Nodes[5],Nodes[6],Nodes[7]);
-                if (!vol)
-                    throw std::runtime_error("Failed to add Tet10 volume");
-                break;
-            case 10:
-                vol = meshDS->AddVolume(Nodes[0],Nodes[1],Nodes[2],Nodes[3],Nodes[4],Nodes[5],Nodes[6],Nodes[7],Nodes[8],Nodes[9]);
-                if (!vol)
-                    throw std::runtime_error("Failed to add Tet10 volume");
-                break;
+        if(ElementId != -1) {
+            switch(Nodes.size()){
+                case 4:
+                    vol = meshDS->AddVolumeWithID(Nodes[0],Nodes[1],Nodes[2],Nodes[3],ElementId);
+                    if (!vol)
+                        throw std::runtime_error("Failed to add Tet4 volume");
+                    break;
+                case 8:
+                    vol = meshDS->AddVolumeWithID(Nodes[0],Nodes[1],Nodes[2],Nodes[3],Nodes[4],Nodes[5],Nodes[6],Nodes[7],ElementId);
+                    if (!vol)
+                        throw std::runtime_error("Failed to add Tet10 volume");
+                    break;
+                case 10:
+                    vol = meshDS->AddVolumeWithID(Nodes[0],Nodes[1],Nodes[2],Nodes[3],Nodes[4],Nodes[5],Nodes[6],Nodes[7],Nodes[8],Nodes[9],ElementId);
+                    if (!vol)
+                        throw std::runtime_error("Failed to add Tet10 volume");
+                    break;
 
-            default: throw std::runtime_error("Unknown node count, [4|5|6|8|10|13|18] are allowed"); //unknown face type
+                default: throw std::runtime_error("Unknown node count, [4|5|6|8|10|13|18] are allowed"); //unknown face type
+            }
+        }else{
+            switch(Nodes.size()){
+                case 4:
+                    vol = meshDS->AddVolume(Nodes[0],Nodes[1],Nodes[2],Nodes[3]);
+                    if (!vol)
+                        throw std::runtime_error("Failed to add Tet4 volume");
+                    break;
+                case 8:
+                    vol = meshDS->AddVolume(Nodes[0],Nodes[1],Nodes[2],Nodes[3],Nodes[4],Nodes[5],Nodes[6],Nodes[7]);
+                    if (!vol)
+                        throw std::runtime_error("Failed to add Tet10 volume");
+                    break;
+                case 10:
+                    vol = meshDS->AddVolume(Nodes[0],Nodes[1],Nodes[2],Nodes[3],Nodes[4],Nodes[5],Nodes[6],Nodes[7],Nodes[8],Nodes[9]);
+                    if (!vol)
+                        throw std::runtime_error("Failed to add Tet10 volume");
+                    break;
+
+                default: throw std::runtime_error("Unknown node count, [4|5|6|8|10|13|18] are allowed"); //unknown face type
+            }
+
         }
 
         return Py::new_reference_to(Py::Int(vol->GetID()));
@@ -489,13 +535,17 @@ PyObject* FemMeshPy::getNodesByFace(PyObject *args)
 
     try {
         const TopoDS_Shape& sh = static_cast<Part::TopoShapeFacePy*>(pW)->getTopoShapePtr()->_Shape;
+        const TopoDS_Face& fc = TopoDS::Face(sh);
         if (sh.IsNull()) {
             PyErr_SetString(PyExc_Exception, "Face is empty");
             return 0;
         }
         Py::List ret;
-        throw Py::Exception("Not yet implemented");
-
+        std::set<long> resultSet = getFemMeshPtr()->getSurfaceNodes(fc);
+        for( std::set<long>::const_iterator it = resultSet.begin();it!=resultSet.end();++it)
+            ret.append(Py::Int(*it));
+        
+        return Py::new_reference_to(ret);
 
     }
     catch (Standard_Failure) {
@@ -603,6 +653,11 @@ Py::Int FemMeshPy::getGroupCount(void) const
     return Py::Int(getFemMeshPtr()->getSMesh()->NbGroup());
 }
 
+Py::Object FemMeshPy::getVolume(void) const
+{
+    return Py::Object(new Base::QuantityPy(new Base::Quantity(getFemMeshPtr()->getVolume())));
+    
+}
 // ===== custom attributes ============================================================
 
 PyObject *FemMeshPy::getCustomAttributes(const char* /*attr*/) const

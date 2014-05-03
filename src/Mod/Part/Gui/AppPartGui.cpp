@@ -5,7 +5,7 @@
  *   published by the Free Software Foundation; either version 2 of the    *
  *   License, or (at your option) any later version.                       *
  *   for detail see the LICENCE text file.                                 *
- *   Jürgen Riegel 2002                                                    *
+ *   Jï¿½rgen Riegel 2002                                                    *
  *                                                                         *
  ***************************************************************************/
 
@@ -24,8 +24,9 @@
 
 #include <Mod/Part/App/PropertyTopoShape.h>
 
-#include "SoBrepShape.h"
 #include "SoBrepFaceSet.h"
+#include "SoBrepEdgeSet.h"
+#include "SoBrepPointSet.h"
 #include "SoFCShapeObject.h"
 #include "ViewProvider.h"
 #include "ViewProviderExt.h"
@@ -51,7 +52,8 @@
 #include "ViewProviderRuledSurface.h"
 #include "ViewProviderPrism.h"
 #include "ViewProviderSpline.h"
-
+#include "ViewProviderRegularPolygon.h"
+#include "TaskDimension.h"
 #include "DlgSettingsGeneral.h"
 #include "DlgSettingsObjectColor.h"
 #include "DlgSettings3DViewPartImp.h"
@@ -110,6 +112,8 @@ void PartGuiExport initPartGui()
     PartGui::ViewProviderPython             ::init();
     PartGui::ViewProviderBox                ::init();
     PartGui::ViewProviderPrism              ::init();
+    PartGui::ViewProviderRegularPolygon     ::init();
+    PartGui::ViewProviderWedge              ::init();
     PartGui::ViewProviderImport             ::init();
     PartGui::ViewProviderCurveNet           ::init();
     PartGui::ViewProviderExtrusion          ::init();
@@ -142,6 +146,9 @@ void PartGuiExport initPartGui()
     PartGui::ViewProviderConeParametric     ::init();
     PartGui::ViewProviderTorusParametric    ::init();
     PartGui::ViewProviderRuledSurface       ::init();
+    PartGui::DimensionLinear                ::initClass();
+    PartGui::DimensionAngular               ::initClass();
+    PartGui::ArcEngine                      ::initClass();
 
     PartGui::Workbench                      ::init();
 

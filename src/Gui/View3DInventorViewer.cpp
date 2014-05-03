@@ -72,6 +72,7 @@
 # include <Inventor/SoOffscreenRenderer.h>
 # include <Inventor/SoPickedPoint.h>
 # include <Inventor/VRMLnodes/SoVRMLGroup.h>
+# include <Inventor/Qt/SoQtBasic.h>
 # include <QEventLoop>
 # include <QGLFramebufferObject>
 # include <QKeyEvent>
@@ -140,9 +141,10 @@ SOQT_OBJECT_ABSTRACT_SOURCE(View3DInventorViewer);
 // *************************************************************************
 
 View3DInventorViewer::View3DInventorViewer (QWidget *parent, const char *name, 
-                                            SbBool embed, Type type, SbBool build) 
+                                            SbBool embed, Type type, SbBool build)
   : inherited (parent, name, embed, type, build), editViewProvider(0), navigation(0),
-    framebuffer(0), editing(FALSE), redirected(FALSE), allowredir(FALSE),axisCross(0),axisGroup(0)
+    framebuffer(0), axisCross(0), axisGroup(0), editing(FALSE), redirected(FALSE),
+    allowredir(FALSE), overrideMode("As Is")
 {
     Gui::Selection().Attach(this);
 
@@ -249,6 +251,11 @@ View3DInventorViewer::View3DInventorViewer (QWidget *parent, const char *name,
     pEventCallback->ref();
     pcViewProviderRoot->addChild(pEventCallback);
     pEventCallback->addEventCallback(SoEvent::getClassTypeId(), handleEventCB, this);
+    
+    dimensionRoot = new SoSwitch(SO_SWITCH_NONE);
+    pcViewProviderRoot->addChild(dimensionRoot);
+    dimensionRoot->addChild(new SoSwitch()); //first one will be for the 3d dimensions.
+    dimensionRoot->addChild(new SoSwitch()); //second one for the delta dimensions.
 
     // This is a callback node that logs all action that traverse the Inventor tree.
 #if defined (FC_DEBUG) && defined(FC_LOGGING_CB)
@@ -354,6 +361,7 @@ void View3DInventorViewer::addViewProvider(ViewProvider* pcProvider)
     SoSeparator* back = pcProvider->getBackRoot ();
     if (back) backgroundroot->addChild(back);
 
+    pcProvider->setOverrideMode(this->getOverrideMode());
     _ViewProviderSet.insert(pcProvider);
 }
 
@@ -373,9 +381,7 @@ void View3DInventorViewer::removeViewProvider(ViewProvider* pcProvider)
     if (back) backgroundroot->removeChild(back);
   
     _ViewProviderSet.erase(pcProvider);
-  
 }
-
 
 SbBool View3DInventorViewer::setEditingViewProvider(Gui::ViewProvider* p, int ModNum)
 {
@@ -406,6 +412,24 @@ void View3DInventorViewer::resetEditingViewProvider()
 SbBool View3DInventorViewer::isEditingViewProvider() const
 {
     return this->editViewProvider ? true : false;
+}
+
+/// display override mode
+void View3DInventorViewer::setOverrideMode(const std::string &mode)
+{
+    if (mode == overrideMode)
+        return;
+    overrideMode = mode;
+    for (std::set<ViewProvider*>::iterator it = _ViewProviderSet.begin(); it != _ViewProviderSet.end(); ++it)
+        (*it)->setOverrideMode(mode);
+}
+
+/// update override mode. doesn't affect providers
+void View3DInventorViewer::updateOverrideMode(const std::string &mode)
+{
+    if (mode == overrideMode)
+        return;
+    overrideMode = mode;
 }
 
 void View3DInventorViewer::clearBuffer(void * userdata, SoAction * action)
@@ -992,6 +1016,27 @@ void View3DInventorViewer::renderFramebuffer()
 // upon spin.
 void View3DInventorViewer::renderScene(void)
 {
+    // https://bitbucket.org/Coin3D/sogui/src/239bd7ae533d/viewers/SoGuiViewer.cpp.in
+    // The commit introduced a regression for empty view volumes.
+#if SOQT_MAJOR_VERSION > 1 || (SOQT_MAJOR_VERSION == 1 && SOQT_MINOR_VERSION >= 6)
+    // With SoQt 1.6 we have problems when the scene is empty and auto-clipping is turned on.
+    // There is always a warning that the frustum is invalid because the far and near distance
+    // values were set to garbage values when trying to determine the clipping planes.
+    // It will be turned on/off depending on the bounding box since the Coin3d doc says it may
+    // have a bad impact on performance if it's always off.
+    SoGetBoundingBoxAction action(getViewportRegion());
+    action.apply(this->getSceneGraph());
+    SbXfBox3f xbox = action.getXfBoundingBox();
+    if (xbox.isEmpty()) {
+        if (this->isAutoClipping())
+            this->setAutoClipping(FALSE);
+    }
+    else {
+        if (!this->isAutoClipping())
+            this->setAutoClipping(TRUE);
+    }
+#endif
+
     // Must set up the OpenGL viewport manually, as upon resize
     // operations, Coin won't set it up until the SoGLRenderAction is
     // applied again. And since we need to do glClear() before applying
@@ -1251,6 +1296,14 @@ SbVec3f View3DInventorViewer::getUpDirection() const
     return upvec;
 }
 
+SbRotation View3DInventorViewer::getCameraOrientation() const
+{
+    SoCamera* cam = this->getCamera();
+    if (!cam)
+        return SbRotation(0,0,0,1); // this is the default
+    return cam->orientation.getValue();
+}
+
 SbVec3f View3DInventorViewer::getPointOnScreen(const SbVec2s& pnt) const
 {
     const SbViewportRegion& vp = this->getViewportRegion();
@@ -1412,6 +1465,14 @@ SoPickedPoint* View3DInventorViewer::pickPoint(const SbVec2s& pos) const
     return (pick ? new SoPickedPoint(*pick) : 0);
 }
 
+const SoPickedPoint* View3DInventorViewer::getPickedPoint(SoEventCallback * n) const
+{
+    if (selectionRoot)
+        return selectionRoot->getPickedPoint(n->getAction());
+    else
+        return n->getPickedPoint();
+}
+
 SbBool View3DInventorViewer::pubSeekToPoint(const SbVec2s& pos)
 {
     return this->seekToPoint(pos);
@@ -1432,7 +1493,7 @@ void View3DInventorViewer::setCameraType(SoType t)
     inherited::setCameraType(t);
     if (t.isDerivedFrom(SoPerspectiveCamera::getClassTypeId())) {
         // When doing a viewAll() for an orthographic camera and switching
-        // to perspective the scene looks completely srange because of the
+        // to perspective the scene looks completely strange because of the
         // heightAngle. Setting it to 45 deg also causes an issue with a too
         // close camera but we don't have this other ugly effect.
         SoCamera* cam = this->getCamera();
@@ -1448,9 +1509,6 @@ void View3DInventorViewer::moveCameraTo(const SbRotation& rot, const SbVec3f& po
 
     SbVec3f campos = cam->position.getValue();
     SbRotation camrot = cam->orientation.getValue();
-    //SbVec3f dir1, dir2;
-    //camrot.multVec(SbVec3f(0, 0, -1), dir1);
-    //rot.multVec(SbVec3f(0, 0, -1), dir2);
 
     QEventLoop loop;
     QTimer timer;
@@ -1468,6 +1526,58 @@ void View3DInventorViewer::moveCameraTo(const SbRotation& rot, const SbVec3f& po
 
     cam->orientation.setValue(rot);
     cam->position.setValue(pos);
+}
+
+void View3DInventorViewer::animatedViewAll(int steps, int ms)
+{
+    SoCamera* cam = this->getCamera();
+    if (!cam)
+        return;
+
+    SbVec3f campos = cam->position.getValue();
+    SbRotation camrot = cam->orientation.getValue();
+    SoGetBoundingBoxAction action(this->getViewportRegion());
+    action.apply(this->getSceneGraph());
+    SbBox3f box = action.getBoundingBox();
+    if (box.isEmpty())
+        return;
+
+    SbSphere sphere;
+    sphere.circumscribe(box);
+
+    SbVec3f direction, pos;
+    camrot.multVec(SbVec3f(0, 0, -1), direction);
+
+    bool isOrthographic = false;
+    float height = 0;
+    float diff = 0;
+    if (cam->isOfType(SoOrthographicCamera::getClassTypeId())) {
+        isOrthographic = true;
+        height = static_cast<SoOrthographicCamera*>(cam)->height.getValue();
+        diff = sphere.getRadius() * 2 - height;
+        pos = (box.getCenter() - direction * sphere.getRadius());
+    }
+    else if (cam->isOfType(SoPerspectiveCamera::getClassTypeId())) {
+        float movelength = sphere.getRadius()/float(tan(static_cast<SoPerspectiveCamera*>
+            (cam)->heightAngle.getValue() / 2.0));
+        pos = box.getCenter() - direction * movelength;
+    }
+
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(&timer, SIGNAL(timeout()), &loop, SLOT(quit()));
+    for (int i=0; i<steps; i++) {
+        float s = float(i)/float(steps);
+        if (isOrthographic) {
+            static_cast<SoOrthographicCamera*>(cam)->height.setValue(height + diff * s);
+        }
+
+        SbVec3f curpos = campos * (1.0f-s) + pos * s;
+        cam->position.setValue(curpos);
+        timer.start(Base::clamp<int>(ms,0,5000));
+        loop.exec(QEventLoop::ExcludeUserInputEvents);
+    }
 }
 
 void View3DInventorViewer::boxZoom(const SbBox2s& box)
@@ -1496,6 +1606,9 @@ void View3DInventorViewer::viewAll()
     if (cam && cam->getTypeId().isDerivedFrom(SoPerspectiveCamera::getClassTypeId()))
         static_cast<SoPerspectiveCamera*>(cam)->heightAngle = (float)(M_PI / 4.0);
 
+    if (isAnimationEnabled())
+        animatedViewAll(10, 20);
+
     // call the default implementation first to make sure everything is visible
     SoQtViewer::viewAll();
 
@@ -1504,7 +1617,6 @@ void View3DInventorViewer::viewAll()
         SoSkipBoundingGroup * group = static_cast<SoSkipBoundingGroup*>(path->getTail());
         group->mode = SoSkipBoundingGroup::INCLUDE_BBOX;
     }
-    //navigation->viewAll();
 }
 
 void View3DInventorViewer::viewAll(float factor)
@@ -2153,4 +2265,50 @@ std::vector<ViewProvider*> View3DInventorViewer::getViewProvidersOfType(const Ba
         }
     }
     return views;
+}
+
+void View3DInventorViewer::turnAllDimensionsOn()
+{
+  dimensionRoot->whichChild = SO_SWITCH_ALL;
+}
+
+void View3DInventorViewer::turnAllDimensionsOff()
+{
+  dimensionRoot->whichChild = SO_SWITCH_NONE;
+}
+
+void View3DInventorViewer::eraseAllDimensions()
+{
+  static_cast<SoSwitch *>(dimensionRoot->getChild(0))->removeAllChildren();
+  static_cast<SoSwitch *>(dimensionRoot->getChild(1))->removeAllChildren();
+}
+
+void View3DInventorViewer::turn3dDimensionsOn()
+{
+  static_cast<SoSwitch *>(dimensionRoot->getChild(0))->whichChild = SO_SWITCH_ALL;
+}
+
+void View3DInventorViewer::turn3dDimensionsOff()
+{
+  static_cast<SoSwitch *>(dimensionRoot->getChild(0))->whichChild = SO_SWITCH_NONE;
+}
+
+void View3DInventorViewer::addDimension3d(SoNode *node)
+{
+  static_cast<SoSwitch *>(dimensionRoot->getChild(0))->addChild(node);
+}
+
+void View3DInventorViewer::addDimensionDelta(SoNode *node)
+{
+  static_cast<SoSwitch *>(dimensionRoot->getChild(1))->addChild(node);
+}
+
+void View3DInventorViewer::turnDeltaDimensionsOn()
+{
+  static_cast<SoSwitch *>(dimensionRoot->getChild(1))->whichChild = SO_SWITCH_ALL;
+}
+
+void View3DInventorViewer::turnDeltaDimensionsOff()
+{
+  static_cast<SoSwitch *>(dimensionRoot->getChild(1))->whichChild = SO_SWITCH_NONE;
 }

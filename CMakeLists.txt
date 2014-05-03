@@ -91,7 +91,9 @@ MESSAGE(STATUS "includedir: ${CMAKE_INSTALL_INCLUDEDIR}")
 # ==============================================================================
 # == Win32 is default behaviour use the LibPack copied in Source tree ==========
 if(MSVC)
+    OPTION(FREECAD_RELEASE_PDB "Create PDB file for Release version." OFF)
     OPTION(FREECAD_LIBPACK_USE "Use the LibPack to Build FreeCAD (only Win32 so far)." ON)
+    OPTION(FREECAD_LIBPACK_USEPYSIDE "Use PySide in LibPack rather to PyQt and Swig." ON)
     set(FREECAD_LIBPACK_DIR ${CMAKE_SOURCE_DIR} CACHE PATH  "Directory of the FreeCAD LibPack")
 else(MSVC)
     OPTION(FREECAD_LIBPACK_USE "Use the LibPack to Build FreeCAD (only Win32 so far)." OFF)
@@ -103,13 +105,42 @@ endif(MSVC)
 
 OPTION(FREECAD_BUILD_GUI "Build FreeCAD Gui. Otherwise you have only the command line and the Python import module." ON)
 OPTION(FREECAD_MAINTAINERS_BUILD "Build FreeCAD for Maintainers, with Docu and 3rd party libs. On Windows the Installer is build." OFF)
+OPTION(FREECAD_USE_EXTERNAL_ZIPIOS "Use system installed zipios++ instead of the bundled." OFF)
+OPTION(FREECAD_USE_EXTERNAL_PIVY "Use system installed python-pivy instead of the bundled." OFF)
+OPTION(FREECAD_BUILD_DEBIAN "Prepare for a build of a Debian package" OFF)
+
 OPTION(FREECAD_BUILD_CAM "Build the FreeCAD CAM module and the needed libs, be aware, unfinished code!" OFF)
 OPTION(FREECAD_BUILD_FEM "Build the FreeCAD FEM module, be aware, unfinished code!" ON)
 OPTION(FREECAD_BUILD_SANDBOX "Build the FreeCAD Sandbox module which is only for testing purposes" OFF)
 OPTION(FREECAD_BUILD_TEMPLATE "Build the FreeCAD template module which is only for testing purposes" OFF)
-OPTION(FREECAD_BUILD_DEBIAN "Prepare for a build of a Debian package" OFF)
-OPTION(FREECAD_USE_EXTERNAL_ZIPIOS "Use system installed zipios++ instead of the bundled." OFF)
-OPTION(FREECAD_USE_EXTERNAL_PIVY "Use system installed python-pivy instead of the bundled." OFF)
+OPTION(FREECAD_BUILD_ARCH "Build the FreeCAD Architecture module" ON)
+OPTION(FREECAD_BUILD_ASSEMBLY "Build the FreeCAD Assembly module" ON)
+OPTION(FREECAD_BUILD_COMPLETE "Build the FreeCAD complete module" ON)
+OPTION(FREECAD_BUILD_DRAFT "Build the FreeCAD draft module" ON)
+OPTION(FREECAD_BUILD_DRAWING "Build the FreeCAD drawing module" ON)
+OPTION(FREECAD_BUILD_IDF "Build the FreeCAD idf module" ON)
+OPTION(FREECAD_BUILD_IMAGE "Build the FreeCAD image module" ON)
+OPTION(FREECAD_BUILD_IMPORT "Build the FreeCAD import module" ON)
+OPTION(FREECAD_BUILD_INSPECTION "Build the FreeCAD inspection module" ON)
+OPTION(FREECAD_BUILD_JTREADER "Build the FreeCAD jt reader module" OFF)
+OPTION(FREECAD_BUILD_MATERIAL "Build the FreeCAD material module" ON)
+OPTION(FREECAD_BUILD_MESH "Build the FreeCAD mesh module" ON)
+OPTION(FREECAD_BUILD_MESH_PART "Build the FreeCAD mesh part module" ON)
+OPTION(FREECAD_BUILD_OPENSCAD "Build the FreeCAD openscad module" ON)
+OPTION(FREECAD_BUILD_PART "Build the FreeCAD part module" ON)
+OPTION(FREECAD_BUILD_PART_DESIGN "Build the FreeCAD part design module" ON)
+OPTION(FREECAD_BUILD_PLOT "Build the FreeCAD plot module" ON)
+OPTION(FREECAD_BUILD_POINTS "Build the FreeCAD points module" ON)
+OPTION(FREECAD_BUILD_RAYTRACING "Build the FreeCAD ray tracing module" ON)
+OPTION(FREECAD_BUILD_REVERSEENGINEERING "Build the FreeCAD reverse engineering module" ON)
+OPTION(FREECAD_BUILD_ROBOT "Build the FreeCAD robot module" ON)
+OPTION(FREECAD_BUILD_SHIP "Build the FreeCAD ship module" ON)
+OPTION(FREECAD_BUILD_SKETCHER "Build the FreeCAD sketcher module" ON)
+OPTION(FREECAD_BUILD_SPREADSHEET "Build the FreeCAD spreadsheet module" ON)
+OPTION(FREECAD_BUILD_START "Build the FreeCAD start module" ON)
+OPTION(FREECAD_BUILD_TEST "Build the FreeCAD test module" ON)
+OPTION(FREECAD_BUILD_WEB "Build the FreeCAD web module" ON)
+
 if(MSVC)
 OPTION(FREECAD_USE_3DCONNEXION "Use the 3D connexion SDK to support 3d mouse." ON)
 OPTION(FREECAD_USE_FREETYPE "Builds the features using FreeType libs" OFF)
@@ -127,36 +158,184 @@ if (FREECAD_BUILD_DEBIAN)
 endif (FREECAD_BUILD_DEBIAN)
 
 # ==============================================================================
+#inter-module dependencies
+
+#took these from Mod/Complete/App/AppComplete.cpp. appears to be working.
+if(FREECAD_BUILD_COMPLETE)
+  set(FREECAD_BUILD_MESH ON)
+  set(FREECAD_BUILD_POINTS ON)
+  set(FREECAD_BUILD_DRAWING ON)
+  set(FREECAD_BUILD_RAYTRACING ON)
+  set(FREECAD_BUILD_PART_DESIGN ON)
+  set(FREECAD_BUILD_IMAGE ON)
+  set(FREECAD_BUILD_DRAFT ON)
+endif(FREECAD_BUILD_COMPLETE)
+
+#inferred from .py files. appears to be working.
+if(FREECAD_BUILD_ARCH)
+  set(FREECAD_BUILD_PART ON)
+  set(FREECAD_BUILD_MESH ON)
+  set(FREECAD_BUILD_DRAFT ON)
+endif(FREECAD_BUILD_ARCH)
+
+#inferred from .py files. appears to be working.
+if(FREECAD_BUILD_OPENSCAD)
+  set(FREECAD_BUILD_MESH_PART ON)
+  set(FREECAD_BUILD_DRAFT ON)
+endif(FREECAD_BUILD_OPENSCAD)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_INSPECTION)
+  set(FREECAD_BUILD_MESH ON)
+  set(FREECAD_BUILD_POINTS ON)
+  set(FREECAD_BUILD_PART ON)
+endif(FREECAD_BUILD_INSPECTION)
+
+#inferred from .py files. appears to be working.
+if(FREECAD_BUILD_SHIP)
+  set(FREECAD_BUILD_PART ON)
+  set(FREECAD_BUILD_PLOT ON)
+  set(FREECAD_BUILD_IMAGE ON)
+endif(FREECAD_BUILD_SHIP)
+
+#inferred from .py files. appears to be working.
+if(FREECAD_BUILD_SPREADSHEET)
+  set(FREECAD_BUILD_DRAFT ON)
+endif(FREECAD_BUILD_SPREADSHEET)
+
+#this has been tested. appears to be working.
+if(FREECAD_BUILD_DRAFT)
+  set(FREECAD_BUILD_SKETCHER ON)
+endif(FREECAD_BUILD_DRAFT)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_PART_DESIGN)
+  set(FREECAD_BUILD_SKETCHER ON)
+endif(FREECAD_BUILD_PART_DESIGN)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_REVERSEENGINEERING)
+  set(FREECAD_BUILD_PART ON)
+  set(FREECAD_BUILD_MESH ON)
+endif(FREECAD_BUILD_REVERSEENGINEERING)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_MESH_PART)
+  set(FREECAD_BUILD_PART ON)
+  set(FREECAD_BUILD_MESH ON)
+  set(FREECAD_BUILD_SMESH ON)
+endif(FREECAD_BUILD_MESH_PART)
+
+#inferred from cmakelists.txt. build errors. obsolete?
+if(FREECAD_BUILD_CAM)
+  set(FREECAD_BUILD_PART ON)
+  set(FREECAD_BUILD_MESH ON)
+endif(FREECAD_BUILD_CAM)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_RAYTRACING)
+  set(FREECAD_BUILD_PART ON)
+endif(FREECAD_BUILD_RAYTRACING)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_DRAWING)
+  set(FREECAD_BUILD_PART ON)
+endif(FREECAD_BUILD_DRAWING)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_ROBOT)
+  set(FREECAD_BUILD_PART ON)
+endif(FREECAD_BUILD_ROBOT)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_SKETCHER)
+  set(FREECAD_BUILD_PART ON)
+endif(FREECAD_BUILD_SKETCHER)
+
+#inferred from .py files. built, but not sure how to test.
+if(FREECAD_BUILD_IDF)
+  set(FREECAD_BUILD_PART ON)
+endif(FREECAD_BUILD_IDF)
+
+#inferred from cmakelists.txt. built, but not sure how to test.
+if(FREECAD_BUILD_IMPORT)
+  set(FREECAD_BUILD_PART ON)
+endif(FREECAD_BUILD_IMPORT)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_FEM)
+  set(FREECAD_BUILD_PART ON)
+  set(FREECAD_BUILD_SMESH ON)
+endif(FREECAD_BUILD_FEM)
+
+#inferred from cmakelists.txt. appears to be working.
+if(FREECAD_BUILD_SANDBOX)
+  set(FREECAD_BUILD_PART ON)
+  set(FREECAD_BUILD_MESH ON)
+endif(FREECAD_BUILD_SANDBOX)
+
+#inferred from header includes. not tested.
+if(FREECAD_BUILD_JTREADER)
+  set(FREECAD_BUILD_MESH ON)
+endif(FREECAD_BUILD_JTREADER)
+
+#leaving test module for someone else.
+#image has none. as far as I can tell.
+#mesh has none. as far as I can tell.
+#part has none. as far as I can tell.
+#material has none. as far as I can tell.
+#web has none. as far as I can tell.
+#start has none. as far as I can tell.
+#assembly has none. as far as I can tell.
+#plot has none. as far as I can tell.
+#points has none. as far as I can tell
+
+# ==============================================================================
 
 if(FREECAD_LIBPACK_USE)
+
     # checking for a unique file in LibPack location to make sure the right version of the LibPack is there
     find_file(FREECAD_LIBPACK_CHECKFILE6X boost_program_options-vc80-mt-gd.lib ${FREECAD_LIBPACK_DIR}/lib )
     find_file(FREECAD_LIBPACK_CHECKFILE7X boost_program_options-vc90-mt-gd-1_39.lib ${FREECAD_LIBPACK_DIR}/lib )
     find_file(FREECAD_LIBPACK_CHECKFILE8X boost_program_options-vc90-mt-gd-1_48.lib ${FREECAD_LIBPACK_DIR}/lib )
+    find_file(FREECAD_LIBPACK_CHECKFILE9X boost_program_options-vc90-mt-gd-1_54.lib ${FREECAD_LIBPACK_DIR}/lib )
     find_file(FREECAD_LIBPACK_CHECKCUSTOM boost_program_options-vc90-mt-gd-1_41.lib ${FREECAD_LIBPACK_DIR}/lib )
+
+    # don't show them in the GUI
+    set(FREECAD_LIBPACK_CHECKFILE6X "${FREECAD_LIBPACK_CHECKFILE6X}" CACHE INTERNAL "Find libpack")
+    set(FREECAD_LIBPACK_CHECKFILE7X "${FREECAD_LIBPACK_CHECKFILE7X}" CACHE INTERNAL "Find libpack")
+    set(FREECAD_LIBPACK_CHECKFILE8X "${FREECAD_LIBPACK_CHECKFILE8X}" CACHE INTERNAL "Find libpack")
+    set(FREECAD_LIBPACK_CHECKFILE9X "${FREECAD_LIBPACK_CHECKFILE9X}" CACHE INTERNAL "Find libpack")
+    set(FREECAD_LIBPACK_CHECKCUSTOM "${FREECAD_LIBPACK_CHECKCUSTOM}" CACHE INTERNAL "Find libpack")
+
     IF(FREECAD_LIBPACK_CHECKFILE6X)
+        set(FREECAD_LIBPACK_VERSION "6.x" CACHE STRING "Displays if the libpack has been found" FORCE)
         include(cMake/UseLibPack6x.cmake)
-        set(FREECAD_LIBPACK6 FOUND CACHE STRING "Displays if the libpack has been found")
-        set(FREECAD_LIBPACK7 NOTFOUND CACHE STRING "Displays if the libpack has been found")
-        MARK_AS_ADVANCED(FORCE FREECAD_LIBPACK7)
     ELSEIF(FREECAD_LIBPACK_CHECKFILE7X)
+        set(FREECAD_LIBPACK_VERSION "7.x" CACHE STRING "Displays if the libpack has been found" FORCE)
         include(cMake/UseLibPack7x.cmake)
-        set(FREECAD_LIBPACK6 NOTFOUND CACHE STRING "Displays if the libpack has been found")
-        MARK_AS_ADVANCED(FORCE FREECAD_LIBPACK6)
-        set(FREECAD_LIBPACK7 FOUND CACHE STRING "Displays if the libpack has been found")	
     ELSEIF(FREECAD_LIBPACK_CHECKFILE8X)
+        set(FREECAD_LIBPACK_VERSION "8.x" CACHE STRING "Displays if the libpack has been found" FORCE)
         include(cMake/UseLibPack8x.cmake)
-        set(FREECAD_LIBPACK6 NOTFOUND CACHE STRING "Displays if the libpack has been found")
-        set(FREECAD_LIBPACK7 NOTFOUND CACHE STRING "Displays if the libpack has been found")
-        set(SWIG_EXECUTABLE ${FREECAD_LIBPACK_DIR}/tools/swigwin-1.3.40/swig.exe)
-        MARK_AS_ADVANCED(FORCE FREECAD_LIBPACK6)
-        set(FREECAD_LIBPACK8 FOUND CACHE STRING "Displays if the libpack has been found")	
+        set(SWIG_EXECUTABLE ${FREECAD_LIBPACK_DIR}/tools/swigwin-1.3.40/swig.exe CACHE STRING "Swig" FORCE)
+    ELSEIF(FREECAD_LIBPACK_CHECKFILE9X)
+        set(FREECAD_LIBPACK_VERSION "9.x" CACHE STRING "Displays if the libpack has been found" FORCE)
+        include(cMake/UseLibPack9x.cmake)
+        set(SWIG_EXECUTABLE ${FREECAD_LIBPACK_DIR}/tools/swigwin-2.0.11/swig.exe CACHE STRING "Swig" FORCE)
+        set(FREECAD_USE_EXTERNAL_PIVY ON CACHE BOOL "Switch off local pivy" FORCE)
+        set(FREECAD_LIBPACK_PYSIDEUIC_REL   "${FREECAD_LIBPACK_DIR}/pyside-tools/Lib/site-packages")
+        file(GLOB FREECAD_LIBPACK_PIVY_COIN "${FREECAD_LIBPACK_DIR}/pivy/*.*")
+        file(GLOB FREECAD_LIBPACK_PIVY_SOQT "${FREECAD_LIBPACK_DIR}/pivy/gui/*.*")
+        file(GLOB FREECAD_LIBPACK_SHIBOKEN  "${FREECAD_LIBPACK_DIR}/shiboken-1.2.1/lib/site-packages/*.pyd")
+        file(GLOB FREECAD_LIBPACK_PYSIDE    "${FREECAD_LIBPACK_DIR}/pyside/lib/site-packages/PySide/*.py*")
+        file(GLOB_RECURSE FREECAD_LIBPACK_PYSIDEUIC RELATIVE "${FREECAD_LIBPACK_PYSIDEUIC_REL}" "${FREECAD_LIBPACK_PYSIDEUIC_REL}/pysideuic/*.py")
+        file(GLOB FREECAD_LIBPACK_PYTHON    "${FREECAD_LIBPACK_DIR}/bin/*.py*")
     ELSEIF(FREECAD_LIBPACK_CHECKCUSTOM)
+        set(FREECAD_LIBPACK_VERSION "Custom" CACHE STRING "Displays if the libpack has been found" FORCE)
         include(cMake/UseLibPackCustom.cmake)
-        set(FREECAD_LIBPACKX FOUND CACHE STRING "Displays if the libpack has been found")	
     ELSE(FREECAD_LIBPACK_CHECKFILE6X)
-        MARK_AS_ADVANCED(FORCE FREECAD_LIBPACK_CHECKFILE6X FREECAD_LIBPACK_CHECKFILE7X)
-        message(SEND_ERROR  "Could not find neither LibPack 6.x nor 7.x in specified location:" ${FREECAD_LIBPACK_DIR})
+        set(FREECAD_LIBPACK_VERSION "NOTFOUND" CACHE STRING "Displays if the libpack has been found" FORCE)
+        message(SEND_ERROR  "Could not find libpack in specified location:" ${FREECAD_LIBPACK_DIR})
     ENDIF(FREECAD_LIBPACK_CHECKFILE6X)
 
 # -------------------------------- PyCXX --------------------------------
@@ -172,9 +351,6 @@ if(FREECAD_LIBPACK_USE)
     ENDIF(NOT SWIG_FOUND)
 
 else(FREECAD_LIBPACK_USE)
-
-MARK_AS_ADVANCED(FORCE FREECAD_LIBPACK_CHECKFILE6X FREECAD_LIBPACK_CHECKFILE7X)
-
 
 
 # ================================================================================
@@ -305,6 +481,12 @@ MARK_AS_ADVANCED(FORCE FREECAD_LIBPACK_CHECKFILE6X FREECAD_LIBPACK_CHECKFILE7X)
     #IF(NOT SMESH_FOUND)
     #    MESSAGE("Salome SMESH was not found!")
     #ENDIF(NOT SMESH_FOUND)
+    
+# -------------------------------- Netgen --------------------------------
+
+    if (FREECAD_BUILD_FEM_NETGEN)
+        find_package(NETGEN)
+    endif(FREECAD_BUILD_FEM_NETGEN)
 
 # -------------------------------- OpenCV --------------------------------
 
@@ -413,14 +595,11 @@ MARK_AS_ADVANCED(FORCE FREECAD_LIBPACK_CHECKFILE6X FREECAD_LIBPACK_CHECKFILE7X)
 
 # -------------------------------- Shiboken/PySide ------------------------
 
-        find_package(Shiboken QUIET)
-        IF(SHIBOKEN_INCLUDE_DIR)
-            message("-- Shiboken has been found.")
-        ENDIF(SHIBOKEN_INCLUDE_DIR)
-        find_package(PySide QUIET)
-        IF(PYSIDE_INCLUDE_DIR)
-            message("-- PySide has been found.")
-        ENDIF(PYSIDE_INCLUDE_DIR)
+        # set(PYTHON_SUFFIX -python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
+        SET(PYTHON_SUFFIX -python2.7) # for shiboken
+        SET(PYTHON_BASENAME -python2.7) # for PySide
+        find_package(Shiboken REQUIRED)
+        find_package(PySide REQUIRED)
 
 # ------------------------------ Matplotlib ------------------------------
 
@@ -470,7 +649,7 @@ ENDIF(CMAKE_SIZEOF_VOID_P EQUAL 8)
 
 IF(MSVC)
 	# set default compiler settings
-	#SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /GF /GY")
+	SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /EHa")
 	SET (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DFC_DEBUG")
 	# set default libs
 	SET (CMAKE_C_STANDARD_LIBRARIES "kernel32.lib user32.lib gdi32.lib winspool.lib SHFolder.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib ")
@@ -478,6 +657,10 @@ IF(MSVC)
 	# set linker flag /nodefaultlib
 	set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /NODEFAULTLIB")
 	SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /NODEFAULTLIB")
+	IF(FREECAD_RELEASE_PDB)
+		set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
+		set (CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG")
+	ENDIF(FREECAD_RELEASE_PDB)
 
 	# Mark 32 bit executables large address aware so they can use > 2GB address space
 	# NOTE: This setting only has an effect on machines with at least 3GB of RAM, although it sets the linker option it doesn't set the the linker switch 'Enable Large Addresses'

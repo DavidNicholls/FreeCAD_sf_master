@@ -15,6 +15,7 @@ include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_SOURCE_DIR}/src/3rdParty/ANN/include
     ${Boost_INCLUDE_DIRS}
+    ${QT_INCLUDE_DIR}
     ${OCC_INCLUDE_DIR}
     ${PYTHON_INCLUDE_PATH}
     ${ZLIB_INCLUDE_DIR}
@@ -61,6 +62,17 @@ SET(Mod_SRCS
 )
 SOURCE_GROUP("Module" FILES ${Mod_SRCS})
 
+SET(FemScripts_SRCS
+    convert2TetGen.py
+    FemLib.py
+    CalculixLib.py
+    MechanicalAnalysis.ui
+    MechanicalAnalysis.py
+    MechanicalMaterial.ui
+    MechanicalMaterial.py
+    ShowDisplacement.ui
+)
+#SOURCE_GROUP("Scripts" FILES ${FemScripts_SRCS})
 
 SET(FemBase_SRCS
     FemMeshObject.cpp
@@ -73,6 +85,10 @@ SET(FemBase_SRCS
     FemAnalysis.h
     FemMesh.cpp
     FemMesh.h
+    FemResultObject.cpp
+    FemResultObject.h
+    FemConstraint.cpp
+    FemConstraint.h
     FemMeshProperty.cpp
     FemMeshProperty.h
 	)
@@ -94,8 +110,6 @@ SET(FemSet_SRCS
 SOURCE_GROUP("Set objects" FILES ${FemSet_SRCS})
 	
 SET(FemConstraints_SRCS
-    FemConstraint.cpp
-    FemConstraint.h
     FemConstraintBearing.h
     FemConstraintBearing.cpp
     FemConstraintFixed.cpp
@@ -109,10 +123,19 @@ SET(FemConstraints_SRCS
 	)
 SOURCE_GROUP("Constraints" FILES ${FemConstraints_SRCS})
 
+SET(FemResult_SRCS
+    FemResultValue.cpp
+    FemResultValue.h
+    FemResultVector.cpp
+    FemResultVector.h
+	)
+SOURCE_GROUP("ResultObjects" FILES ${FemResult_SRCS})
+
 SET(Fem_SRCS
 	${FemBase_SRCS}
 	${FemSet_SRCS}
 	${FemConstraints_SRCS}
+	${FemResult_SRCS}
     ${Mod_SRCS}
     ${Python_SRCS}
 )
@@ -129,27 +152,13 @@ fc_target_copy_resource(Fem
     ${CMAKE_BINARY_DIR}/Mod/Fem
 	${Driver_Resources} 
 	Init.py 
-    convert2TetGen.py
-    FemLib.py
-    MechanicalAnalysis.py
-    MechanicalMaterial.py
+    ${FemScripts_SRCS}
     )
 
-	
-if(MSVC)
-    set_target_properties(Fem PROPERTIES SUFFIX ".pyd")
-    set_target_properties(Fem PROPERTIES DEBUG_OUTPUT_NAME "Fem_d")
-    set_target_properties(Fem PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Fem)
-    set_target_properties(Fem PROPERTIES PREFIX "../")
-elseif(MINGW)
-    set_target_properties(Fem PROPERTIES SUFFIX ".pyd")
-    set_target_properties(Fem PROPERTIES DEBUG_OUTPUT_NAME "Fem_d")
-    set_target_properties(Fem PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Fem)
+SET_BIN_DIR(Fem Fem /Mod/Fem)
+if(WIN32)
     set_target_properties(Fem PROPERTIES PREFIX "")
-else(MSVC)
-    set_target_properties(Fem PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Mod/Fem)
-    set_target_properties(Fem PROPERTIES PREFIX "")
-    set_target_properties(Fem PROPERTIES INSTALL_RPATH ${INSTALL_RPATH})
-endif(MSVC)
+    set_target_properties(Fem PROPERTIES SUFFIX ".pyd")
+endif(WIN32)
 
 INSTALL(TARGETS Fem DESTINATION lib)

@@ -144,6 +144,7 @@ struct DocumentP
     std::map<Vertex,DocumentObject*> vertexMap;
     bool rollback;
     bool closable;
+    bool keepTrailingDigits;
     int iUndoMode;
     unsigned int UndoMemSize;
     unsigned int UndoMaxStackSize;
@@ -158,6 +159,7 @@ struct DocumentP
         iTransactionCount = 0;
         rollback = false;
         closable = true;
+        keepTrailingDigits = true;
         iUndoMode = 0;
         UndoMemSize = 0;
         UndoMaxStackSize = 20;
@@ -197,6 +199,32 @@ void Document::writeDependencyGraphViz(std::ostream &out)
           << ";" << endl;
     */
     out << "}" << endl;
+}
+
+void Document::exportGraphviz(std::ostream& out)
+{
+    std::vector<std::string> names;
+    names.reserve(d->objectMap.size());
+    DependencyList DepList;
+    std::map<DocumentObject*,Vertex> VertexObjectList;
+
+    // Filling up the adjacency List
+    for (std::map<std::string,DocumentObject*>::const_iterator It = d->objectMap.begin(); It != d->objectMap.end();++It) {
+        // add the object as Vertex and remember the index
+        VertexObjectList[It->second] = add_vertex(DepList);
+        names.push_back(It->second->Label.getValue());
+    }
+    // add the edges
+    for (std::map<std::string,DocumentObject*>::const_iterator It = d->objectMap.begin(); It != d->objectMap.end();++It) {
+        std::vector<DocumentObject*> OutList = It->second->getOutList();
+        for (std::vector<DocumentObject*>::const_iterator It2=OutList.begin();It2!=OutList.end();++It2) {
+            if (*It2)
+                add_edge(VertexObjectList[It->second],VertexObjectList[*It2],DepList);
+        }
+    }
+
+    if (!names.empty())
+        boost::write_graphviz(out, DepList, boost::make_label_writer(&(names[0])));
 }
 
 //bool _has_cycle_dfs(const DependencyList & g, vertex_t u, default_color_type * color)
@@ -774,10 +802,10 @@ void Document::writeObjects(const std::vector<App::DocumentObject*>& obj,
                             Base::Writer &writer) const
 {
     // writing the features types
-    writer.incInd(); // indention for 'Objects count'
+    writer.incInd(); // indentation for 'Objects count'
     writer.Stream() << writer.ind() << "<Objects Count=\"" << obj.size() <<"\">" << endl;
 
-    writer.incInd(); // indention for 'Object type'
+    writer.incInd(); // indentation for 'Object type'
     std::vector<DocumentObject*>::const_iterator it;
     for (it = obj.begin(); it != obj.end(); ++it) {
         writer.Stream() << writer.ind() << "<Object "
@@ -786,27 +814,28 @@ void Document::writeObjects(const std::vector<App::DocumentObject*>& obj,
         << "/>" << endl;
     }
 
-    writer.decInd();  // indention for 'Object type'
+    writer.decInd();  // indentation for 'Object type'
     writer.Stream() << writer.ind() << "</Objects>" << endl;
 
     // writing the features itself
     writer.Stream() << writer.ind() << "<ObjectData Count=\"" << obj.size() <<"\">" << endl;
 
-    writer.incInd(); // indention for 'Object name'
+    writer.incInd(); // indentation for 'Object name'
     for (it = obj.begin(); it != obj.end(); ++it) {
         writer.Stream() << writer.ind() << "<Object name=\"" << (*it)->getNameInDocument() << "\">" << endl;
         (*it)->Save(writer);
         writer.Stream() << writer.ind() << "</Object>" << endl;
     }
 
-    writer.decInd(); // indention for 'Object name'
+    writer.decInd(); // indentation for 'Object name'
     writer.Stream() << writer.ind() << "</ObjectData>" << endl;
-    writer.decInd();  // indention for 'Objects count'
+    writer.decInd();  // indentation for 'Objects count'
 }
 
 std::vector<App::DocumentObject*>
 Document::readObjects(Base::XMLReader& reader)
 {
+    d->keepTrailingDigits = !reader.doNameMapping();
     std::vector<App::DocumentObject*> objs;
 
     // read the object types
@@ -901,31 +930,6 @@ unsigned int Document::getMemSize (void) const
     size += getUndoMemSize();
 
     return size;
-}
-
-void Document::exportGraphviz(std::ostream& out)
-{
-    std::vector<std::string> names;
-    names.reserve(d->objectMap.size());
-    DependencyList DepList;
-    std::map<DocumentObject*,Vertex> VertexObjectList;
-
-    // Filling up the adjacency List
-    for (std::map<std::string,DocumentObject*>::const_iterator It = d->objectMap.begin(); It != d->objectMap.end();++It) {
-        // add the object as Vertex and remember the index
-        VertexObjectList[It->second] = add_vertex(DepList);
-        names.push_back(It->second->Label.getValue());
-    }
-    // add the edges
-    for (std::map<std::string,DocumentObject*>::const_iterator It = d->objectMap.begin(); It != d->objectMap.end();++It) {
-        std::vector<DocumentObject*> OutList = It->second->getOutList();
-        for (std::vector<DocumentObject*>::const_iterator It2=OutList.begin();It2!=OutList.end();++It2) {
-            if (*It2)
-                add_edge(VertexObjectList[It->second],VertexObjectList[*It2],DepList);
-        }
-    }
-
-    boost::write_graphviz(out, DepList, boost::make_label_writer(&(names[0])));
 }
 
 bool Document::saveAs(const char* file)
@@ -1382,7 +1386,9 @@ bool Document::_recomputeFeature(DocumentObject* Feat)
     else {
         returnCode->Which = Feat;
         _RecomputeLog.push_back(returnCode);
+#ifdef FC_DEBUG
         Base::Console().Error("%s\n",returnCode->Why.c_str());
+#endif
         Feat->setError();
     }
     return false;
@@ -1800,6 +1806,14 @@ std::string Document::getUniqueObjectName(const char *Name) const
     if (!Name || *Name == '\0')
         return std::string();
     std::string CleanName = Base::Tools::getIdentifier(Name);
+    // remove also trailing digits from clean name which is to avoid to create lengthy names
+    // like 'Box001001'
+    if (!d->keepTrailingDigits) {
+        std::string::size_type index = CleanName.find_last_not_of("0123456789");
+        if (index+1 < CleanName.size()) {
+            CleanName = CleanName.substr(0,index+1);
+        }
+    }
 
     // name in use?
     std::map<std::string,DocumentObject*>::const_iterator pos;

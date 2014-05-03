@@ -458,3 +458,30 @@ def superWireReverse(debuglist,closed=False):
             return None
     print newedges
     return Part.Wire(newedges)
+
+def importDXFface(filename,layer=None,doc=None):
+    import FreeCAD,importDXF
+    doc = doc or FreeCAD.activeDocument()
+    layers = importDXF.processdxf(doc,filename) or importDXF.layers
+    for l in layers:
+        if FreeCAD.GuiUp:
+            for o in l.Group:
+                o.ViewObject.hide()
+            l.ViewObject.hide()
+    groupobj=[go for go in layers if (not layer) or go.Label == layer]
+    edges=[]
+    if not groupobj:
+        raise ValueError, 'import of layer %s failed' % layer
+    for shapeobj in groupobj[0].Group:
+        edges.extend(shapeobj.Shape.Edges)
+    faces = edgestofaces(edges)
+        # in order to allow multiple import with the same layer name
+        # we need to remove used objects from the layer group
+        #shapeobj.Document.removeObject(shapeobj.Name)
+    #groupobj[0].Document.removeObject(groupobj[0].Name)
+    for layer in layers: #remove everything that has been imported
+        layer.removeObjectsFromDocument()
+        #for obj in layer.Group:
+        #    obj.Document.removeObject(obj.Name)
+        layer.Document.removeObject(layer.Name)
+    return faces

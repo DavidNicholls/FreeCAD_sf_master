@@ -40,100 +40,144 @@
 using namespace SketcherGui;
 using namespace Gui::TaskView;
 
+SketcherGeneralWidget::SketcherGeneralWidget(QWidget *parent)
+  : QWidget(parent), ui(new Ui_TaskSketcherGeneral)
+{
+    ui->setupUi(this);
+
+    // connecting the needed signals
+    connect(ui->checkBoxShowGrid, SIGNAL(toggled(bool)),
+            this, SLOT(toggleGridView(bool)));
+    connect(ui->checkBoxGridSnap, SIGNAL(stateChanged(int)),
+            this, SLOT(toggleGridSnap(int)));
+    connect(ui->gridSize, SIGNAL(valueChanged(double)),
+            this, SLOT(setGridSize(double)));
+    connect(ui->checkBoxAutoconstraints, SIGNAL(stateChanged(int)),
+            this, SIGNAL(emitToggleAutoconstraints(int)));
+}
+
+SketcherGeneralWidget::~SketcherGeneralWidget()
+{
+    delete ui;
+}
+
+void SketcherGeneralWidget::saveSettings()
+{
+    Base::Reference<ParameterGrp> hGrp = App::GetApplication().GetUserParameter()
+        .GetGroup("BaseApp")->GetGroup("Preferences")->GetGroup("Mod/Sketcher/General");
+    hGrp->SetBool("ShowGrid", ui->checkBoxShowGrid->isChecked());
+	
+	ui->gridSize->pushToHistory();
+
+    hGrp->SetBool("GridSnap", ui->checkBoxGridSnap->isChecked());
+    hGrp->SetBool("AutoConstraints", ui->checkBoxAutoconstraints->isChecked());
+}
+
+void SketcherGeneralWidget::loadSettings()
+{
+    Base::Reference<ParameterGrp> hGrp = App::GetApplication().GetUserParameter()
+        .GetGroup("BaseApp")->GetGroup("Preferences")->GetGroup("Mod/Sketcher/General");
+    ui->checkBoxShowGrid->setChecked(hGrp->GetBool("ShowGrid", true));
+	ui->gridSize->setParamGrpPath(QByteArray("User parameter:BaseApp/History/SketchGridSize"));
+	//ui->gridSize->setToLastUsedValue();
+    ui->checkBoxGridSnap->setChecked(hGrp->GetBool("GridSnap", ui->checkBoxGridSnap->isChecked()));
+    ui->checkBoxAutoconstraints->setChecked(hGrp->GetBool("AutoConstraints", ui->checkBoxAutoconstraints->isChecked()));
+}
+
+
+
+void SketcherGeneralWidget::toggleGridView(bool on)
+{
+    ui->label->setEnabled(on);
+    ui->gridSize->setEnabled(on);
+    ui->checkBoxGridSnap->setEnabled(on);
+    emitToggleGridView(on);
+}
+
+void SketcherGeneralWidget::setGridSize(double val)
+{
+    emitSetGridSize(val);
+}
+
+void SketcherGeneralWidget::setInitGridSize(double val)
+{
+	ui->gridSize->setValue(Base::Quantity(val,Base::Unit::Length));
+}
+
+void SketcherGeneralWidget::toggleGridSnap(int state)
+{
+    emitToggleGridSnap(state);
+}
+
+void SketcherGeneralWidget::changeEvent(QEvent *e)
+{
+    QWidget::changeEvent(e);
+    if (e->type() == QEvent::LanguageChange) {
+        ui->retranslateUi(this);
+    }
+}
+
+// ----------------------------------------------------------------------------
+
 TaskSketcherGeneral::TaskSketcherGeneral(ViewProviderSketch *sketchView)
     : TaskBox(Gui::BitmapFactory().pixmap("document-new"),tr("Edit controls"),true, 0)
     , sketchView(sketchView)
 {
     // we need a separate container widget to add all controls to
-    proxy = new QWidget(this);
-    ui = new Ui_TaskSketcherGeneral();
-    ui->setupUi(proxy);
-    QMetaObject::connectSlotsByName(this);
-
-    this->groupLayout()->addWidget(proxy);
+    widget = new SketcherGeneralWidget(this);
+    this->groupLayout()->addWidget(widget);
 
     // connecting the needed signals
     QObject::connect(
-        ui->checkBoxShowGrid, SIGNAL(toggled(bool)),
-        this           , SLOT(toggleGridView(bool))
+        widget, SIGNAL(emitToggleGridView(bool)),
+        this  , SLOT  (toggleGridView(bool))
         );
     QObject::connect(
-        ui->checkBoxGridSnap, SIGNAL(stateChanged(int)),
-        this              , SLOT  (toggleGridSnap(int))
+        widget, SIGNAL(emitToggleGridSnap(int)),
+        this  , SLOT  (toggleGridSnap(int))
        );
 
     QObject::connect(
-        ui->comboBoxGridSize, SIGNAL(currentIndexChanged(QString)),
-        this              , SLOT  (setGridSize(QString))
+        widget, SIGNAL(emitSetGridSize(double)),
+        this  , SLOT  (setGridSize(double))
        );
 
     QObject::connect(
-        ui->checkBoxAutoconstraints, SIGNAL(stateChanged(int)),
-        this              , SLOT  (toggleAutoconstraints(int))
+        widget, SIGNAL(emitToggleAutoconstraints(int)),
+        this  , SLOT  (toggleAutoconstraints(int))
        );
     
+
     Gui::Selection().Attach(this);
-
-    Base::Reference<ParameterGrp> hGrp = App::GetApplication().GetUserParameter()
-        .GetGroup("BaseApp")->GetGroup("Preferences")->GetGroup("Mod/Sketcher/General");
-    ui->checkBoxShowGrid->setChecked(hGrp->GetBool("ShowGrid", true));
-
-    QString size = ui->comboBoxGridSize->currentText();
-    size = QString::fromAscii(hGrp->GetASCII("GridSize", (const char*)size.toAscii()).c_str());
-    ui->comboBoxGridSize->setCurrentIndex(ui->comboBoxGridSize->findText(size));
-
-    ui->checkBoxGridSnap->setChecked(hGrp->GetBool("GridSnap", ui->checkBoxGridSnap->isChecked()));
-    ui->checkBoxAutoconstraints->setChecked(hGrp->GetBool("AutoConstraints", ui->checkBoxAutoconstraints->isChecked()));
+    widget->loadSettings();
+	widget->setInitGridSize(sketchView->GridSize.getValue() );
 }
 
 TaskSketcherGeneral::~TaskSketcherGeneral()
 {
-    Base::Reference<ParameterGrp> hGrp = App::GetApplication().GetUserParameter()
-        .GetGroup("BaseApp")->GetGroup("Preferences")->GetGroup("Mod/Sketcher/General");
-    hGrp->SetBool("ShowGrid", ui->checkBoxShowGrid->isChecked());
-
-    QString size = ui->comboBoxGridSize->currentText();
-    hGrp->SetASCII("GridSize", (const char*)size.toAscii());
-
-    hGrp->SetBool("GridSnap", ui->checkBoxGridSnap->isChecked());
-    hGrp->SetBool("AutoConstraints", ui->checkBoxAutoconstraints->isChecked());
-
-    delete ui;
+    widget->saveSettings();
     Gui::Selection().Detach(this);
 }
 
 void TaskSketcherGeneral::toggleGridView(bool on)
 {
-    ui->label->setEnabled(on);
-    ui->comboBoxGridSize->setEnabled(on);
-    ui->checkBoxGridSnap->setEnabled(on);
     sketchView->ShowGrid.setValue(on);
 }
 
-void TaskSketcherGeneral::setGridSize(const QString& val)
+void TaskSketcherGeneral::setGridSize(double val)
 {
-    float gridSize = (float) Base::UnitsApi::translateUnit(val);
-    if (gridSize > 0)
-        sketchView->GridSize.setValue(gridSize);
+    if (val > 0)
+        sketchView->GridSize.setValue(val);
 }
 
 void TaskSketcherGeneral::toggleGridSnap(int state)
 {
-    setGridSize(ui->comboBoxGridSize->currentText()); // Ensure consistency
     sketchView->GridSnap.setValue(state == Qt::Checked);
 }
 
 void TaskSketcherGeneral::toggleAutoconstraints(int state)
 {
     sketchView->Autoconstraints.setValue(state == Qt::Checked);
-}
-
-void TaskSketcherGeneral::changeEvent(QEvent *e)
-{
-    TaskBox::changeEvent(e);
-    if (e->type() == QEvent::LanguageChange) {
-        ui->retranslateUi(proxy);
-    }
 }
 
 /// @cond DOXERR

@@ -107,7 +107,7 @@ QString FileDialog::getSaveFileName (QWidget * parent, const QString & caption, 
     if (windowTitle.isEmpty())
         windowTitle = FileDialog::tr("Save as");
 
-#if defined(FC_OS_MACOSX)
+#if QT_VERSION < 0x040800 && defined(FC_OS_MACOSX)
     options |= QFileDialog::DontUseNativeDialog;
 #endif
     // NOTE: We must not change the specified file name afterwards as we may return the name of an already
@@ -143,6 +143,9 @@ QString FileDialog::getSaveFileName (QWidget * parent, const QString & caption, 
     }
 #else
     QString file = QFileDialog::getSaveFileName(parent, windowTitle, dirName, filter, selectedFilter, options);
+#if QT_VERSION >= 0x040600
+    file = QDir::fromNativeSeparators(file);
+#endif
 #endif
     if (!file.isEmpty()) {
         setWorkingDirectory(file);
@@ -157,7 +160,7 @@ QString FileDialog::getSaveFileName (QWidget * parent, const QString & caption, 
  */
 QString FileDialog::getExistingDirectory( QWidget * parent, const QString & caption, const QString & dir, Options options )
 {
-#if defined(FC_OS_MACOSX)
+#if QT_VERSION < 0x040800 && defined(FC_OS_MACOSX)
     options |= QFileDialog::DontUseNativeDialog;
 #endif
     QString path = QFileDialog::getExistingDirectory(parent, caption, dir, options);
@@ -185,7 +188,7 @@ QString FileDialog::getOpenFileName(QWidget * parent, const QString & caption, c
     QString windowTitle = caption;
     if (windowTitle.isEmpty())
         windowTitle = FileDialog::tr("Open");
-#if defined(FC_OS_MACOSX)
+#if QT_VERSION < 0x040800 && defined(FC_OS_MACOSX)
     options |= QFileDialog::DontUseNativeDialog;
 #endif
 
@@ -217,6 +220,9 @@ QString FileDialog::getOpenFileName(QWidget * parent, const QString & caption, c
     }
 #else
     QString file = QFileDialog::getOpenFileName(parent, windowTitle, dirName, filter, selectedFilter, options);
+#if QT_VERSION >= 0x040600
+    file = QDir::fromNativeSeparators(file);
+#endif
 #endif
     if (!file.isEmpty()) {
         setWorkingDirectory(file);
@@ -240,7 +246,7 @@ QStringList FileDialog::getOpenFileNames (QWidget * parent, const QString & capt
     QString windowTitle = caption;
     if (windowTitle.isEmpty())
         windowTitle = FileDialog::tr("Open");
-#if defined(FC_OS_MACOSX)
+#if QT_VERSION < 0x040800 && defined(FC_OS_MACOSX)
     options |= QFileDialog::DontUseNativeDialog;
 #endif
 
@@ -272,6 +278,11 @@ QStringList FileDialog::getOpenFileNames (QWidget * parent, const QString & capt
     }
 #else
     QStringList files = QFileDialog::getOpenFileNames(parent, windowTitle, dirName, filter, selectedFilter, options);
+#if QT_VERSION >= 0x040600
+    for (QStringList::iterator it = files.begin(); it != files.end(); ++it) {
+        *it = QDir::fromNativeSeparators(*it);
+    }
+#endif
 #endif
     if (!files.isEmpty()) {
         setWorkingDirectory(files.front());
@@ -520,9 +531,9 @@ void FileChooser::chooseFile()
     else
         fn = QFileDialog::getExistingDirectory( this, tr( "Select a directory" ), lineEdit->text() );
 
-    if ( !fn.isEmpty() ) {
-        lineEdit->setText( fn );
-        fileNameSelected( fn );
+    if (!fn.isEmpty()) {
+        lineEdit->setText(fn);
+        fileNameSelected(fn);
     }
 }
 

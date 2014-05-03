@@ -33,6 +33,7 @@
 # include <BRepPrim_Wedge.hxx>
 # include <BRep_Builder.hxx>
 # include <BRep_Tool.hxx>
+# include <BRepLib.hxx>
 # include <BRepBuilderAPI_MakeFace.hxx>
 # include <BRepBuilderAPI_MakeEdge.hxx>
 # include <BRepBuilderAPI_MakeWire.hxx>
@@ -325,45 +326,59 @@ show(PyObject *self, PyObject *args)
 static PyObject * makeWireString(PyObject *self, PyObject *args)
 {
     PyObject *intext;
-    const char* dir;                      
+    const char* dir;
     const char* fontfile;
-    float height;
-    int track = 0;
+    const char* fontspec;
+    bool useFontSpec = false;
+    double height;
+    double track = 0;
 
     Py_UNICODE *unichars;
     Py_ssize_t pysize;
    
     PyObject *CharList;
    
-    if (!PyArg_ParseTuple(args, "Ossf|i", &intext, 
-                                          &dir,
-                                          &fontfile,
-                                          &height,
-                                          &track))  {
-        Base::Console().Message("** makeWireString bad args.\n");                                           
-        return NULL;
-    }
-
+    if (PyArg_ParseTuple(args, "Ossd|d", &intext,                               // compatibility with old version
+                                         &dir,
+                                         &fontfile,
+                                         &height,
+                                         &track))  {
+            useFontSpec = false; }
+    else { 
+        PyErr_Clear();
+        if (PyArg_ParseTuple(args, "Osd|d", &intext, 
+                                            &fontspec,
+                                            &height,
+                                            &track))  {
+            useFontSpec = true; }
+        else {
+            Base::Console().Message("** makeWireString bad args.\n");
+            return NULL; }
+    }            
+ 
     if (PyString_Check(intext)) {
         PyObject *p = Base::PyAsUnicodeObject(PyString_AsString(intext));    
         if (!p) {
             Base::Console().Message("** makeWireString can't convert PyString.\n");
             return NULL;
         }
-        pysize = PyUnicode_GetSize(p);    
+        pysize = PyUnicode_GetSize(p);
         unichars = PyUnicode_AS_UNICODE(p);
     }
-    else if (PyUnicode_Check(intext)) {        
-        pysize = PyUnicode_GetSize(intext);   
+    else if (PyUnicode_Check(intext)) {
+        pysize = PyUnicode_GetSize(intext);
         unichars = PyUnicode_AS_UNICODE(intext);
     }
     else {
-        Base::Console().Message("** makeWireString bad text parameter.\n");                                           
+        Base::Console().Message("** makeWireString bad text parameter.\n");
         return NULL;
     }
 
-    try {        
-        CharList = FT2FC(unichars,pysize,dir,fontfile,height,track);         // get list of wire chars
+    try {
+        if (useFontSpec) {
+            CharList = FT2FC(unichars,pysize,fontspec,height,track); }
+        else {
+            CharList = FT2FC(unichars,pysize,dir,fontfile,height,track); }
     }
     catch (Standard_DomainError) {                                      // Standard_DomainError is OCC error.
         PyErr_SetString(PyExc_Exception, "makeWireString failed - Standard_DomainError");
@@ -526,7 +541,8 @@ static PyObject * makeSolid(PyObject *self, PyObject *args)
         if (count == 0)
             Standard_Failure::Raise("No shells found in shape");
 
-        const TopoDS_Solid& solid = mkSolid.Solid();
+        TopoDS_Solid solid = mkSolid.Solid();
+        BRepLib::OrientClosedSolid(solid);
         return new TopoShapeSolidPy(new TopoShape(solid));
     }
     catch (Standard_Failure) {
@@ -848,6 +864,29 @@ static PyObject * makeHelix(PyObject *self, PyObject *args)
     try {
         TopoShape helix;
         TopoDS_Shape wire = helix.makeHelix(pitch, height, radius, angle);
+        return new TopoShapeWirePy(new TopoShape(wire));
+    }
+    catch (Standard_Failure) {
+        Handle_Standard_Failure e = Standard_Failure::Caught();
+        PyErr_SetString(PyExc_Exception, e->GetMessageString());
+        return 0;
+    }
+}
+
+static PyObject * makeLongHelix(PyObject *self, PyObject *args)
+{
+    double pitch, height, radius, angle=-1.0;
+    PyObject *pleft=Py_False;
+    if (!PyArg_ParseTuple(args, "ddd|dO!", &pitch, &height, &radius, &angle,
+                                           &(PyBool_Type), &pleft)) {
+        Base::Console().Message("Part.makeLongHelix fails on parms\n");
+        return 0;
+        }
+
+    try {
+        TopoShape helix;
+        Standard_Boolean anIsLeft = PyObject_IsTrue(pleft) ? Standard_True : Standard_False;
+        TopoDS_Shape wire = helix.makeLongHelix(pitch, height, radius, angle, anIsLeft);
         return new TopoShapeWirePy(new TopoShape(wire));
     }
     catch (Standard_Failure) {
@@ -1242,14 +1281,19 @@ static PyObject * makeLoft(PyObject *self, PyObject *args)
     PyObject *pcObj;
     PyObject *psolid=Py_False;
     PyObject *pruled=Py_False;
-    if (!PyArg_ParseTuple(args, "O|O!O!", &pcObj,
+    PyObject *pclosed=Py_False;
+    if (!PyArg_ParseTuple(args, "O|O!O!O!", &pcObj,
                                           &(PyBool_Type), &psolid,
-                                          &(PyBool_Type), &pruled))
+                                          &(PyBool_Type), &pruled,
+                                          &(PyBool_Type), &pclosed)) {
+        Base::Console().Message("Part.makeLoft Parameter Error\n");
         return NULL;
+    }
 
     try {
         TopTools_ListOfShape profiles;
         Py::Sequence list(pcObj);
+
         for (Py::Sequence::iterator it = list.begin(); it != list.end(); ++it) {
             if (PyObject_TypeCheck((*it).ptr(), &(Part::TopoShapePy::Type))) {
                 const TopoDS_Shape& sh = static_cast<TopoShapePy*>((*it).ptr())->
@@ -1261,15 +1305,53 @@ static PyObject * makeLoft(PyObject *self, PyObject *args)
         TopoShape myShape;
         Standard_Boolean anIsSolid = PyObject_IsTrue(psolid) ? Standard_True : Standard_False;
         Standard_Boolean anIsRuled = PyObject_IsTrue(pruled) ? Standard_True : Standard_False;
-        TopoDS_Shape aResult = myShape.makeLoft(profiles, anIsSolid, anIsRuled);
+        Standard_Boolean anIsClosed = PyObject_IsTrue(pclosed) ? Standard_True : Standard_False;
+        TopoDS_Shape aResult = myShape.makeLoft(profiles, anIsSolid, anIsRuled,anIsClosed);
         return new TopoShapePy(new TopoShape(aResult));
     }
     catch (Standard_Failure) {
         Handle_Standard_Failure e = Standard_Failure::Caught();
+        Base::Console().Message("debug: Part.makeLoft catching 'Standard_Failure' msg: '%s'\n", e->GetMessageString());
         PyErr_SetString(PyExc_Exception, e->GetMessageString());
         return 0;
     }
 #endif
+}
+
+static PyObject* setStaticValue(PyObject *self, PyObject *args)
+{
+    char *name, *cval;
+    if (PyArg_ParseTuple(args, "ss", &name, &cval)) {
+        if (!Interface_Static::SetCVal(name, cval)) {
+            PyErr_Format(PyExc_RuntimeError, "Failed to set '%s'", name);
+            return 0;
+        }
+        Py_Return;
+    }
+
+    PyErr_Clear();
+    PyObject* index_or_value;
+    if (PyArg_ParseTuple(args, "sO", &name, &index_or_value)) {
+        if (PyInt_Check(index_or_value)) {
+            int ival = (int)PyInt_AsLong(index_or_value);
+            if (!Interface_Static::SetIVal(name, ival)) {
+                PyErr_Format(PyExc_RuntimeError, "Failed to set '%s'", name);
+                return 0;
+            }
+            Py_Return;
+        }
+        else if (PyFloat_Check(index_or_value)) {
+            double rval = PyFloat_AsDouble(index_or_value);
+            if (!Interface_Static::SetRVal(name, rval)) {
+                PyErr_Format(PyExc_RuntimeError, "Failed to set '%s'", name);
+                return 0;
+            }
+            Py_Return;
+        }
+    }
+
+    PyErr_SetString(PyExc_TypeError, "First argument must be string and must be either string, int or float");
+    return 0;
 }
 
 static PyObject * exportUnits(PyObject *self, PyObject *args)
@@ -1614,6 +1696,11 @@ struct PyMethodDef Part_methods[] = {
      "By default a cylindrical surface is used to create the helix. If the fourth parameter is set\n"
      "(the apex given in degree) a conical surface is used instead"},
 
+    {"makeLongHelix" ,makeLongHelix,METH_VARARGS,
+     "makeLongHelix(pitch,height,radius,[angle],[hand]) -- Make a (multi-edge) helix with a given pitch, height and radius\n"
+     "By default a cylindrical surface is used to create the helix. If the fourth parameter is set\n"
+     "(the apex given in degree) a conical surface is used instead."},
+
     {"makeThread" ,makeThread,METH_VARARGS,
      "makeThread(pitch,depth,height,radius) -- Make a thread with a given pitch, depth, height and radius"},
 
@@ -1643,6 +1730,9 @@ struct PyMethodDef Part_methods[] = {
 
     {"exportUnits" ,exportUnits ,METH_VARARGS,
      "exportUnits([string=MM|M|IN]) -- Set units for exporting STEP/IGES files and returns the units."},
+
+    {"setStaticValue" ,setStaticValue ,METH_VARARGS,
+     "setStaticValue(string,string|int|float) -- Set a name to a value The value can be a string, int or float."},
 
     {"cast_to_shape" ,cast_to_shape,METH_VARARGS,
      "cast_to_shape(shape) -- Cast to the actual shape type"},

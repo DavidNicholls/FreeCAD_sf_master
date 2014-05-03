@@ -207,6 +207,7 @@ Loft::Loft()
     Sections.setSize(0);
     ADD_PROPERTY_TYPE(Solid,(false),"Loft",App::Prop_None,"Create solid");
     ADD_PROPERTY_TYPE(Ruled,(false),"Loft",App::Prop_None,"Ruled surface");
+    ADD_PROPERTY_TYPE(Closed,(false),"Loft",App::Prop_None,"Close Last to First Profile");
 }
 
 short Loft::mustExecute() const
@@ -216,6 +217,8 @@ short Loft::mustExecute() const
     if (Solid.isTouched())
         return 1;
     if (Ruled.isTouched())
+        return 1;
+    if (Closed.isTouched())
         return 1;
     return 0;
 }
@@ -262,9 +265,10 @@ App::DocumentObjectExecReturn *Loft::execute(void)
 
         Standard_Boolean isSolid = Solid.getValue() ? Standard_True : Standard_False;
         Standard_Boolean isRuled = Ruled.getValue() ? Standard_True : Standard_False;
+        Standard_Boolean isClosed = Closed.getValue() ? Standard_True : Standard_False;
 
         TopoShape myShape;
-        this->Shape.setValue(myShape.makeLoft(profiles, isSolid, isRuled));
+        this->Shape.setValue(myShape.makeLoft(profiles, isSolid, isRuled,isClosed));
         return App::DocumentObject::StdReturn;
     }
     catch (Standard_Failure) {
@@ -356,7 +360,7 @@ App::DocumentObjectExecReturn *Sweep::execute(void)
                 return new App::DocumentObjectExecReturn("Linked shape is invalid.");
             // There is a weird behaviour of BRepOffsetAPI_MakePipeShell when trying to add the wire as is.
             // If we re-create the wire then everything works fine.
-            // https://sourceforge.net/apps/phpbb/free-cad/viewtopic.php?f=10&t=2673&sid=fbcd2ff4589f0b2f79ed899b0b990648#p20268
+            // http://forum.freecadweb.org/viewtopic.php?f=10&t=2673&sid=fbcd2ff4589f0b2f79ed899b0b990648#p20268
             if (shape.ShapeType() == TopAbs_FACE) {
                 TopoDS_Wire faceouterWire = ShapeAnalysis::OuterWire(TopoDS::Face(shape));
                 profiles.Append(faceouterWire);

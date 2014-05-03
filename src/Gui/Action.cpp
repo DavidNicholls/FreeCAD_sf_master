@@ -191,6 +191,11 @@ QString Action::whatsThis() const
     return _action->whatsThis();
 }
 
+void Action::setMenuRole(QAction::MenuRole menuRole)
+{
+    _action->setMenuRole(menuRole); 
+}
+
 // --------------------------------------------------------------------
 
 /**
@@ -296,6 +301,7 @@ int ActionGroup::checkedAction() const
 void ActionGroup::setCheckedAction(int i)
 {
     _group->actions()[i]->setChecked(true);
+    this->setIcon(_group->actions()[i]->icon());
 }
 
 /**

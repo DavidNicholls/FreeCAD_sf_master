@@ -21,15 +21,20 @@
 #*                                                                         *
 #***************************************************************************
 
-import FreeCAD,FreeCADGui,Draft,ArchCommands,ArchFloor
-from PyQt4 import QtCore
-from DraftTools import translate
+import FreeCAD,Draft,ArchCommands,ArchFloor
+if FreeCAD.GuiUp:
+    import FreeCADGui
+    from PySide import QtCore, QtGui
+    from DraftTools import translate
+else:
+    def translate(ctxt,txt):
+        return txt
 
 __title__="FreeCAD Site"
 __author__ = "Yorik van Havre"
 __url__ = "http://www.freecadweb.org"
 
-def makeSite(objectslist=None,name=str(translate("Arch","Site"))):
+def makeSite(objectslist=None,name=translate("Arch","Site")):
     '''makeBuilding(objectslist): creates a site including the
     objects from the given list.'''
     obj = FreeCAD.ActiveDocument.addObject("App::DocumentObjectGroupPython",name)
@@ -52,7 +57,7 @@ class _CommandSite:
         ok = False
         if (len(sel) == 1):
             if Draft.getType(sel[0]) in ["Cell","Building","Floor"]:
-                FreeCAD.ActiveDocument.openTransaction(str(translate("Arch","Type conversion")))
+                FreeCAD.ActiveDocument.openTransaction(translate("Arch","Type conversion"))
                 FreeCADGui.doCommand("import Arch")
                 FreeCADGui.doCommand("obj = Arch.makeSite()")
                 FreeCADGui.doCommand("Arch.copyProperties(FreeCAD.ActiveDocument."+sel[0].Name+",obj)")
@@ -70,7 +75,7 @@ class _CommandSite:
                     ss += ","
                 ss += "FreeCAD.ActiveDocument."+o.Name
             ss += "]"
-            FreeCAD.ActiveDocument.openTransaction(str(translate("Arch","Create Site")))
+            FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Site"))
             FreeCADGui.doCommand("import Arch")
             FreeCADGui.doCommand("Arch.makeSite("+ss+")")
             FreeCAD.ActiveDocument.commitTransaction()
@@ -80,8 +85,10 @@ class _Site(ArchFloor._Floor):
     "The Site object"
     def __init__(self,obj):
         ArchFloor._Floor.__init__(self,obj)
-        obj.addProperty("App::PropertyLink","Terrain","Arch",
-                        str(translate("Arch","The terrain of this site")))
+        obj.addProperty("App::PropertyLink","Terrain","Arch",translate("Arch","The terrain of this site"))
+        obj.addProperty("App::PropertyString","Address","Arch",translate("Arch","The address of this site"))
+        obj.addProperty("App::PropertyString","Coordinates","Arch",translate("Arch","The geographic coordinates of this site"))
+        obj.addProperty("App::PropertyString","Url","Arch",translate("Arch","An url that shows this site in a mapping website"))
         self.Type = "Site"
         obj.setEditorMode('Height',2)
                 
@@ -97,5 +104,5 @@ class _ViewProviderSite(ArchFloor._ViewProviderFloor):
     def claimChildren(self):
         return self.Object.Group+[self.Object.Terrain]
 
-
-FreeCADGui.addCommand('Arch_Site',_CommandSite())
+if FreeCAD.GuiUp:
+    FreeCADGui.addCommand('Arch_Site',_CommandSite())

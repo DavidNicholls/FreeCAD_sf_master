@@ -25,7 +25,7 @@
 #*     and some code.                                                      *
 #*                                                                         *
 #***************************************************************************
-__title__="FreeCAD OpenSCAD Workbench - CSG exporter Version 0.01c"
+__title__="FreeCAD OpenSCAD Workbench - CSG exporter Version"
 __author__ = "Keith Sloan <keith@sloan-home.co.uk>"
 __url__ = ["http://www.sloan-home.co.uk/Export/Export.html"]
 
@@ -145,11 +145,15 @@ def process_object(csg,ob):
         import math
         f = str(ob.Polygon)
 #        r = str(ob.Length/2.0/math.sin(math.pi/ob.Polygon))
-        r = str(ob.Length) #length seems to be the outer radius
+        r = str(ob.Circumradius) #length seems to be the outer radius
         h = str(ob.Height)
         mm = check_multmatrix(csg,ob,0,0,-float(h)/2)
         csg.write("cylinder($fn = "+f+", "+fafs+", h = "+h+", r1 = "+r+\
                   ", r2 = "+r+", center = "+center(mm)+");\n")
+        if mm == 1: csg.write("}\n")
+    elif ob.TypeId == "Part::RegularPolygon":
+        mm = check_multmatrix(csg,ob,0,0,-float(h)/2)
+        csg.write("circle($fn = "+str(ob.NumberOfSides)+", "+fafs+", r = "+str(ob.Radius)+");\n")
         if mm == 1: csg.write("}\n")
 
     elif ob.TypeId == "Part::Extrusion" :
@@ -227,7 +231,7 @@ def process_object(csg,ob):
             process_object(csg,subobj)
         csg.write("}\n")
         
-    elif ob.TypeId == "Part::Common" :
+    elif ob.TypeId == "Part::MultiCommon" :
         print "Multi Common / intersection"
         csg.write("intersection() {\n")
         for subobj in ob.Shapes:
