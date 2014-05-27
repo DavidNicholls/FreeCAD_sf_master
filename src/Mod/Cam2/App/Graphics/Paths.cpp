@@ -1,16 +1,40 @@
 
-#include <PreCompiled.h>
 
-#include "Paths.h"
+#if defined(HEEKSCAD) || defined(HEEKSCNC)
+	#ifndef HEEKS
+		#define HEEKS
+	#endif // HEEKS(anything)
+
+	#include "stdafx.h"
+	#include "OpenCascadeTools.h"
+	#include "HeeksCADInterface.h"
+	#include "ObjList.h"
+
+	#ifdef HEEKSCAD
+		extern CHeeksCADInterface heekscad_interface;
+		#include "RS274X.h"
+	#else
+		// HEEKSCNC
+		extern CHeeksCADInterface* heeksCAD;
+		#include "Pocketing.h"
+		#include "Pocket.h"
+	#endif // HEEKSCAD
+#else
+	// FreeCAD
+	#include <PreCompiled.h>
+	#include "Paths.h"
+	#include <App/Application.h>
+	#include <App/Document.h>
+	#include <Mod/Part/App/PartFeature.h>
+	#include <Mod/Part/App/PrimitiveFeature.h>
+#endif
+
 #include "CDouble.h"
-
-#include <App/Application.h>
-#include <App/Document.h>
-#include <Mod/Part/App/PartFeature.h>
-#include <Mod/Part/App/PrimitiveFeature.h>
 
 #include <exception>
 
+#include <ShapeExtend_Status.hxx>
+#include <Standard_Boolean.hxx>
 #include <BRep_Builder.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -98,12 +122,21 @@ namespace Cam
 
 	double GetTolerance()
 	{
-		return(0.00001);	// TODO Setup tolerances properly
+		#ifdef HEEKS
+			#ifdef HEEKSCAD
+				return(heekscad_interface.GetTolerance());
+			#else
+				return(heeksCAD->GetTolerance());
+			#endif
+		#else
+			// FreeCAD
+			return(0.00001);	// TODO Setup tolerances properly
+		#endif // HEEKS
 	}
 
-	TopoDS_Edge Edge( const Point start, const Point end, const gp_Circ circle )
+	TopoDS_Edge Edge( const Cam::Point start, const Cam::Point end, const gp_Circ circle )
 	{
-		return(Edge( start.Location(), end.Location(), circle ));
+		return( Cam::Edge( start.Location(), end.Location(), circle ) );
 	}
 
 	TopoDS_Edge Edge( const gp_Pnt start, const gp_Pnt end, const gp_Circ circle )
@@ -138,9 +171,9 @@ namespace Cam
 
 	}
 
-	TopoDS_Edge Edge( const Point start, const Point end )
+	TopoDS_Edge Edge( const Cam::Point start, const Cam::Point end )
 	{
-		return(Edge( start.Location(), end.Location() ));
+		return( Cam::Edge( start.Location(), end.Location() ) );
 	}
 
 	TopoDS_Edge Edge( const gp_Pnt start, const gp_Pnt end )
@@ -200,6 +233,10 @@ namespace Cam
 		double angle = vector1.AngleWithRef( vector2, reference );
 		while (angle < minimum_angle) angle += (2 * M_PI);
 		return(angle);
+	}
+
+	Point::Point() : gp_Ax2(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 0.0, 1.0))
+	{
 	}
 
 	Point::Point(const gp_Pnt p)
@@ -330,16 +367,16 @@ namespace Cam
 
 	double Point::Units() const
 	{
-		return(1.0);	// TODO Handle metric or imperial units (25.4 for inches)
-	}
-
-	double Point::Tolerance() const
-	{
-		if (s_tolerance <= 0.0)
-		{
-			s_tolerance = Cam::GetTolerance();
-		}
-		return(s_tolerance);
+		#ifdef HEEKS
+			#ifdef HEEKSCNC
+				return(theApp.m_program->m_units);
+			#else
+				return(heekscad_interface.GetViewUnits());
+			#endif
+		#else
+			// FreeCAD
+			return(1.0);	// TODO Handle metric or imperial units (25.4 for inches)
+		#endif
 	}
 
 	bool Point::operator==( const Point & rhs ) const
@@ -413,6 +450,35 @@ namespace Cam
 		return(_lhs.Distance(_rhs));
 	}
 
+
+	double Cam::Point::Distance( const Point & rhs ) const
+	{
+		gp_Pnt _lhs(this->Location());
+		gp_Pnt _rhs(rhs.Location());
+		return(_lhs.Distance(_rhs));
+	}
+
+	/**
+		Return TRUE if both points are coincident when viewed from the specified direction
+	 */
+	bool Cam::Point::EqualForDirection( const gp_Dir direction, const Point & rhs ) const
+	{
+		return(gp_Lin(this->Location(), direction).Contains(rhs.Location(), this->Tolerance() * 2.0) != 0);
+	}
+
+	/* static */ double Cam::Point::Tolerance()
+	{
+		if (s_tolerance <= 0.0)
+		{
+			s_tolerance = Cam::GetTolerance();
+		}
+		return(s_tolerance);
+	}
+
+	/* static */ void Cam::Point::Tolerance(const double tolerance)
+	{
+		s_tolerance = tolerance;
+	}
 
 
 	Ax3::Ax3( const gp_Ax3 & rhs ) : gp_Ax3(rhs) {}
@@ -549,54 +615,56 @@ namespace Cam
 	}
 
 
-	QString & operator<< ( QString & str, const Path & path )
-	{
-		str.append(QString::fromUtf8("<Path "));
-
-		switch(path.Curve().GetType())
+	#ifndef HEEKS
+		// FreeCAD
+		QString & operator<< ( QString & str, const Path & path )
 		{
-		case GeomAbs_Line:
-			str.append(QString::fromUtf8("type=\"GeomAbs_Line\""));
-			break;
+			str.append(QString::fromUtf8("<Path "));
 
-		case GeomAbs_Circle:
-			str.append(QString::fromUtf8("type=\"GeomAbs_Circle\""));
-			break;
+			switch(path.Curve().GetType())
+			{
+			case GeomAbs_Line:
+				str.append(QString::fromUtf8("type=\"GeomAbs_Line\""));
+				break;
 
-		case GeomAbs_Ellipse:
-			str += QString::fromUtf8("type=\"GeomAbs_Ellipse\"");
-			break;
+			case GeomAbs_Circle:
+				str.append(QString::fromUtf8("type=\"GeomAbs_Circle\""));
+				break;
 
-		case GeomAbs_Hyperbola:
-			str += QString::fromUtf8("type=\"GeomAbs_Hyperbola\"");
-			break;
+			case GeomAbs_Ellipse:
+				str += QString::fromUtf8("type=\"GeomAbs_Ellipse\"");
+				break;
 
-		case GeomAbs_Parabola:
-			str += QString::fromUtf8("type=\"GeomAbs_Parabola\"");
-			break;
+			case GeomAbs_Hyperbola:
+				str += QString::fromUtf8("type=\"GeomAbs_Hyperbola\"");
+				break;
 
-		case GeomAbs_BezierCurve:
-			str += QString::fromUtf8("type=\"GeomAbs_BezierCurve\"");
-			break;
+			case GeomAbs_Parabola:
+				str += QString::fromUtf8("type=\"GeomAbs_Parabola\"");
+				break;
 
-		case GeomAbs_BSplineCurve:
-			str += QString::fromUtf8("type=\"GeomAbs_BSplineCurve\"");
-			break;
+			case GeomAbs_BezierCurve:
+				str += QString::fromUtf8("type=\"GeomAbs_BezierCurve\"");
+				break;
 
-		case GeomAbs_OtherCurve:
-			str += QString::fromUtf8("type=\"GeomAbs_OtherCurve\"");
-			break;
+			case GeomAbs_BSplineCurve:
+				str += QString::fromUtf8("type=\"GeomAbs_BSplineCurve\"");
+				break;
+
+			case GeomAbs_OtherCurve:
+				str += QString::fromUtf8("type=\"GeomAbs_OtherCurve\"");
+				break;
+			}
+
+			str += QString::fromUtf8(", direction=\"") + QString(path.m_is_forwards?QString::fromUtf8("FORWARDS"):QString::fromUtf8("BACKWARDS")) + QString::fromUtf8("\"");
+			str += QString::fromUtf8(", start_parameter=\"") + QString().arg(path.StartParameter()) + QString::fromUtf8("\"");
+			str += QString::fromUtf8(", end_parameter=\"") + QString().arg(path.EndParameter()) + QString::fromUtf8("\"");
+
+			str += QString::fromUtf8(", start_point=\"") + QString().arg(path.StartPoint().X()) + QString::fromUtf8(",") + QString().arg(path.StartPoint().Y()) + QString::fromUtf8(",") + QString().arg(path.StartPoint().Z()) + QString::fromUtf8("\"");
+			str += QString::fromUtf8(", end_point=\"") + QString().arg(path.EndPoint().X()) + QString::fromUtf8(",") + QString().arg(path.EndPoint().Y()) + QString::fromUtf8(",") + QString().arg(path.EndPoint().Z()) + QString::fromUtf8("\"/>\n");
+			return(str);
 		}
-
-		str += QString::fromUtf8(", direction=\"") + QString(path.m_is_forwards?QString::fromUtf8("FORWARDS"):QString::fromUtf8("BACKWARDS")) + QString::fromUtf8("\"");
-		str += QString::fromUtf8(", start_parameter=\"") + QString().arg(path.StartParameter()) + QString::fromUtf8("\"");
-		str += QString::fromUtf8(", end_parameter=\"") + QString().arg(path.EndParameter()) + QString::fromUtf8("\"");
-
-		str += QString::fromUtf8(", start_point=\"") + QString().arg(path.StartPoint().X()) + QString::fromUtf8(",") + QString().arg(path.StartPoint().Y()) + QString::fromUtf8(",") + QString().arg(path.StartPoint().Z()) + QString::fromUtf8("\"");
-		str += QString::fromUtf8(", end_point=\"") + QString().arg(path.EndPoint().X()) + QString::fromUtf8(",") + QString().arg(path.EndPoint().Y()) + QString::fromUtf8(",") + QString().arg(path.EndPoint().Z()) + QString::fromUtf8("\"/>\n");
-		return(str);
-	}
-
+	#endif
 
 
 
@@ -661,7 +729,7 @@ namespace Cam
 		}
 	}
 
-	bool FacesIntersect( const TopoDS_Face lhs, const TopoDS_Face rhs )
+	bool FacesIntersect( const TopoDS_Face lhs, const TopoDS_Face rhs, std::list<Cam::Point> *pIntersections /* = NULL */ )
 	{
 		try
 		{
@@ -697,6 +765,24 @@ namespace Cam
 							intersector.Perform();
 							if ((intersector.IsDone()) && (intersector.Result().Length() > 0))
 							{
+								if (pIntersections != NULL)
+								{
+									for (int i=1; i<=intersector.Result().Length(); i++)
+									{
+										gp_Pnt from, to;
+
+										BRepAdaptor_Curve curve(edge1);
+										curve.D0(intersector.Result().Value(i).First(), from);
+										curve.D0(intersector.Result().Value(i).Last(), to);
+
+										pIntersections->push_back( Cam::Point(from) );
+										pIntersections->push_back( Cam::Point(to) );
+
+										pIntersections->sort();
+										pIntersections->unique();
+									}
+								}
+
 								return(true);
 							}
 						} // End if - then
@@ -869,6 +955,10 @@ namespace Cam
 			Faces_t empty;
 			return(empty);
 		}
+		catch (...) {
+			Faces_t empty;
+			return(empty);
+		}
 	}
 
 
@@ -931,22 +1021,23 @@ ContiguousPath::Ids_t ContiguousPath::PathsThatSurroundUs() const { return(m_pat
 
 ContiguousPath::Ids_t ContiguousPath::PathsThatWeSurround() const { return(m_paths_that_we_surround); }
 
-
-QString & operator<< ( QString & str, const ContiguousPath & path )
-{
-	str += QString::fromUtf8("<ContiguousPath ") + QString::fromUtf8(" num_paths=\"") + QString().arg(path.m_paths.size()) + QString::fromUtf8("\"");
-	str += QString::fromUtf8(", direction=\"") + QString(path.m_is_forwards?QString::fromUtf8("FORWARDS"):QString::fromUtf8("BACKWARDS")) + QString::fromUtf8("\"") + QString::fromUtf8(">\n");
-
-	for (std::vector<Path>::const_iterator itPath = path.m_paths.begin(); itPath != path.m_paths.end(); itPath++)
+#ifndef HEEKS
+	// FreeCAD
+	QString & operator<< ( QString & str, const ContiguousPath & path )
 	{
-		str << *itPath;
+		str += QString::fromUtf8("<ContiguousPath ") + QString::fromUtf8(" num_paths=\"") + QString().arg(path.m_paths.size()) + QString::fromUtf8("\"");
+		str += QString::fromUtf8(", direction=\"") + QString(path.m_is_forwards?QString::fromUtf8("FORWARDS"):QString::fromUtf8("BACKWARDS")) + QString::fromUtf8("\"") + QString::fromUtf8(">\n");
+
+		for (std::vector<Path>::const_iterator itPath = path.m_paths.begin(); itPath != path.m_paths.end(); itPath++)
+		{
+			str << *itPath;
+		}
+
+		str += QString::fromUtf8("</ContiguousPath>\n");
+
+		return(str);
 	}
-
-	str += QString::fromUtf8("</ContiguousPath>\n");
-
-	return(str);
-}
-
+#endif
 
 Paths::Paths() { }
 
@@ -1038,12 +1129,12 @@ Cam::Paths::Paths(const TopoDS_Shape shape)
 	Add(shape);
 }
 
-/*
-Cam::Paths::Paths(HeeksObj *object)
-{
-	Add(object);
-}
-*/
+#ifdef HEEKS
+	Cam::Paths::Paths(HeeksObj *object)
+	{
+		Add(object);
+	}
+#endif // HEEKS
 
 Cam::Paths::Paths(area::CArea & area)
 {
@@ -1098,6 +1189,135 @@ void Cam::Paths::Add(area::CArea & area)
 }
 
 
+#ifdef HEEKS
+	/**
+		Convert all the child sketches (and any other valid linear elements) to wires
+		before adding them to this Paths object.
+	 */
+	void Cam::Paths::Add(HeeksObj *object)
+	{
+		m_pPointLocationData.reset(NULL);	// reset the cache to indicate it's out of date.
+	
+		bool added_as_parent = false;
+	
+		/*
+		#ifdef HEEKSCNC
+		if (object->GetType() == PocketingType)
+		{
+			CPocketing *pPocketing = dynamic_cast<CPocketing *>(object);
+			if (pPocketing)
+			{
+				Cam::Paths unmachined_paths = pPocketing->UnmachinedPaths();
+				for (::size_t i=0; i<unmachined_paths.size(); i++)
+				{
+					Add( unmachined_paths[i].Wire() );
+				} // End for
+				added_as_parent = true;
+			}
+		}
+	
+		if (object->GetType() == PocketType)
+		{
+			CPocket *pPocket = dynamic_cast<CPocket *>(object);
+			if (pPocket)
+			{
+				Cam::Paths unmachined_paths = pPocket->UnmachinedPaths();
+				for (::size_t i=0; i<unmachined_paths.size(); i++)
+				{
+					Add( unmachined_paths[i].Wire() );
+				} // End for
+				added_as_parent = true;
+			}
+		}
+		#endif // HEEKSCNC
+		*/
+	
+		if ((object->GetType() == PointType) || (object->GetType() == VertexType))
+		{
+			double p[3];
+			#ifdef HEEKSCAD
+				heekscad_interface.VertexGetPoint( object, p );
+			#else
+				heeksCAD->VertexGetPoint( object, p );
+			#endif // HEEKSCAD
+	
+			TopoDS_Vertex vertex;
+			BRepPrim_Builder builder;
+			builder.MakeVertex(vertex, gp_Pnt(p[0], p[1], p[2]));
+			m_vertices.push_back(vertex);
+		}
+		
+	
+		{
+			std::list<TopoDS_Shape> wires;
+			#ifdef HEEKSCAD
+				if (heekscad_interface.ConvertSketchToFaceOrWire( object, wires, false))
+			#else
+				if (heeksCAD->ConvertSketchToFaceOrWire( object, wires, false))
+			#endif // HEEKSCAD
+			{
+				for (std::list<TopoDS_Shape>::iterator itWire = wires.begin(); itWire != wires.end(); itWire++)
+				{
+					Add( TopoDS::Wire(*itWire) );
+					added_as_parent = true;
+				}
+			} // End if - then
+		}
+	
+		if (! added_as_parent)
+		{
+			ObjList *objlist = dynamic_cast<ObjList *>(object);
+			if (objlist)
+			{
+				for (HeeksObj *child = objlist->GetFirstChild(); child != NULL; child = objlist->GetNextChild())
+				{
+					#ifdef HEEKSCNC
+						if (child->GetType() == PocketingType)
+						{
+							CPocketing *pPocketing = dynamic_cast<CPocketing *>(child);
+							if (pPocketing)
+							{
+								Cam::Paths unmachined_paths = pPocketing->UnmachinedPaths();
+								for (::size_t i=0; i<unmachined_paths.size(); i++)
+								{
+									Add( unmachined_paths[i].Wire() );
+								} // End for
+							}
+							continue;
+						}
+	
+						if (child->GetType() == PocketType)
+						{
+							CPocket *pPocket = dynamic_cast<CPocket *>(object);
+							if (pPocket)
+							{
+								Cam::Paths unmachined_paths = pPocket->UnmachinedPaths();
+								for (::size_t i=0; i<unmachined_paths.size(); i++)
+								{
+									Add( unmachined_paths[i].Wire() );
+								} // End for
+							}
+							continue;
+						}
+					#endif // HEEKSCNC
+	
+					std::list<TopoDS_Shape> wires;
+					#ifdef HEEKSCAD
+						if (heekscad_interface.ConvertSketchToFaceOrWire( child, wires, false))
+					#else
+						if (heeksCAD->ConvertSketchToFaceOrWire( child, wires, false))
+					#endif // HEEKSCAD
+					{
+						for (std::list<TopoDS_Shape>::iterator itWire = wires.begin(); itWire != wires.end(); itWire++)
+						{
+							Add( TopoDS::Wire(*itWire) );
+						}
+					} // End if - then
+				}
+			}
+		}
+	}
+#endif // HEEKS
 
 bool Cam::ContiguousPath::operator< (const Cam::ContiguousPath & rhs ) const
 {
@@ -1268,63 +1488,64 @@ bool Cam::ContiguousPath::Add(Cam::Path path)
 	}
 }
 
-
-void Cam::Paths::Add(const QStringList input_geometry_names)
-{
-	m_pPointLocationData.reset(NULL);	// reset the cache to indicate it's out of date.
-
-	App::Document *document = App::GetApplication().getActiveDocument();
-	if (document)
+#ifndef HEEKS
+	void Cam::Paths::Add(const QStringList input_geometry_names)
 	{
-		for (QStringList::size_type i=0; i<input_geometry_names.size(); i++)
+		m_pPointLocationData.reset(NULL);	// reset the cache to indicate it's out of date.
+	
+		App::Document *document = App::GetApplication().getActiveDocument();
+		if (document)
 		{
-			App::DocumentObject *object = document->getObject(input_geometry_names[i].toAscii().constData());
-			if(object && object->isDerivedFrom(Part::Feature::getClassTypeId())) 
+			for (QStringList::size_type i=0; i<input_geometry_names.size(); i++)
 			{
-				Part::Feature *part_feature = dynamic_cast<Part::Feature *>(object);
-				if (part_feature)
+				App::DocumentObject *object = document->getObject(input_geometry_names[i].toAscii().constData());
+				if(object && object->isDerivedFrom(Part::Feature::getClassTypeId())) 
 				{
-					Add(part_feature);
+					Part::Feature *part_feature = dynamic_cast<Part::Feature *>(object);
+					if (part_feature)
+					{
+						Add(part_feature);
+					}
 				}
 			}
 		}
 	}
-}
-
-/**
-	This is the conversion from a Cam::Feature into a series of TopoDS_Edge objects.  If
-	the TopoDS_Shape returned represents a solid or some other feature that we're not 
-	interested in then it will be quietly discarded.
- */
-void Cam::Paths::Add( const Part::Feature *link )
-{
-	m_pPointLocationData.reset(NULL);	// reset the cache to indicate it's out of date.
-
-	if (!link) return;
-    if (link->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId()))
+	
+	/**
+		This is the conversion from a Cam::Feature into a series of TopoDS_Edge objects.  If
+		the TopoDS_Shape returned represents a solid or some other feature that we're not 
+		interested in then it will be quietly discarded.
+	 */
+	void Cam::Paths::Add( const Part::Feature *link )
 	{
-		const TopoDS_Shape& shape = static_cast<const Part::Feature*>(link)->Shape.getShape()._Shape;
-		if (shape.IsNull() == false) 
+		m_pPointLocationData.reset(NULL);	// reset the cache to indicate it's out of date.
+	
+		if (!link) return;
+	    if (link->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId()))
 		{
-			Add(shape);
+			const TopoDS_Shape& shape = static_cast<const Part::Feature*>(link)->Shape.getShape()._Shape;
+			if (shape.IsNull() == false) 
+			{
+				Add(shape);
+			}
 		}
-	}
-	/*
-	else if (link->getTypeId().isDerivedFrom(Sketcher::SketchObject::getClassTypeId()))
-	{
-		// It must be a vertex contained within a sketch.
-
-		const Sketcher::SketchObject *sketch = dynamic_cast<const Sketcher::SketchObject *>(link);
-		if (sketch)
+		/*
+		else if (link->getTypeId().isDerivedFrom(Sketcher::SketchObject::getClassTypeId()))
 		{
-			const std::vector<Part::Geometry *> &getInternalGeometry(void) const { return Geometry.getValues(); }
-
-			BRepBuilderAPI_MakeVertex make_vertex(gp_Pnt(part_vertex->X.getValue(), part_vertex->Y.getValue(), part_vertex->Z.getValue()));
-			Add(make_vertex.Vertex());
+			// It must be a vertex contained within a sketch.
+	
+			const Sketcher::SketchObject *sketch = dynamic_cast<const Sketcher::SketchObject *>(link);
+			if (sketch)
+			{
+				const std::vector<Part::Geometry *> &getInternalGeometry(void) const { return Geometry.getValues(); }
+	
+				BRepBuilderAPI_MakeVertex make_vertex(gp_Pnt(part_vertex->X.getValue(), part_vertex->Y.getValue(), part_vertex->Z.getValue()));
+				Add(make_vertex.Vertex());
+			}
 		}
+		*/
 	}
-	*/
-}
+#endif
 
 void Cam::Paths::Add(const TopoDS_Vertex vertex)
 {
@@ -1366,7 +1587,7 @@ void Cam::Paths::Add(const TopoDS_Shape shape)
 	}
 }
 
-void Paths::Add(const TopoDS_Edge edge)
+void Cam::Paths::Add(const TopoDS_Edge edge)
 {
 	m_pPointLocationData.reset(NULL);	// reset the cache to indicate it's out of date.
 
@@ -1377,7 +1598,7 @@ void Paths::Add(const TopoDS_Edge edge)
 }
 
 
-void Paths::Add(const TopoDS_Wire wire, const gp_Pln reference_plane, const double maximum_distance)
+void Cam::Paths::Add(const TopoDS_Wire wire, const gp_Pln reference_plane, const double maximum_distance)
 {
 	m_pPointLocationData.reset(NULL);	// reset the cache to indicate it's out of date.
 
@@ -1509,6 +1730,119 @@ Cam::ContiguousPath & Cam::ContiguousPath::operator+=( ContiguousPath &rhs )
 }
 
 
+#ifdef HEEKS
+	/**
+		Generate a Sketch object representing all the ContiguousPath objects we contain.
+	 */
+	HeeksObj *Cam::Paths::Sketch() const
+	{
+		#ifdef HEEKSCAD
+			HeeksObj *parent_sketch = heekscad_interface.NewSketch();
+		#else
+			HeeksObj *parent_sketch = heeksCAD->NewSketch();
+		#endif
+	
+		for (std::vector<ContiguousPath>::const_iterator itPath = m_contiguous_paths.begin(); itPath != m_contiguous_paths.end(); itPath++)
+		{
+			#ifdef HEEKSCAD
+				HeeksObj *child_sketch = heekscad_interface.NewSketch();
+			#else
+				HeeksObj *child_sketch = heeksCAD->NewSketch();
+			#endif
+			parent_sketch->Add(itPath->Sketch( child_sketch ), NULL);
+		}
+	
+		for (std::vector<TopoDS_Vertex>::const_iterator itVertex = m_vertices.begin(); itVertex != m_vertices.end(); itVertex++)
+		{
+			Point location = BRep_Tool::Pnt(*itVertex);
+	
+			#ifdef HEEKSCAD
+				parent_sketch->Add( heekscad_interface.NewPoint(location), NULL );
+			#else
+				parent_sketch->Add( heeksCAD->NewPoint(location), NULL );
+			#endif
+		} // End for
+	
+		return(parent_sketch);
+	}
+	
+	/**
+		Generate a Sketch representing all the Path objects we contain.
+	 */
+	HeeksObj *Cam::ContiguousPath::Sketch(HeeksObj *parent_sketch) const
+	{
+		HeeksObj *sketch;
+		CHeeksCADInterface *pInterface = NULL;
+	
+		#ifdef HEEKSCAD
+			pInterface = &heekscad_interface;
+		#else
+			pInterface = heeksCAD;
+		#endif
+	
+	
+		if (parent_sketch == NULL)
+		{
+			#ifdef HEEKSCAD
+				sketch = heekscad_interface.NewSketch();
+			#else
+				sketch = heeksCAD->NewSketch();
+			#endif
+		}
+		else
+		{
+			sketch = parent_sketch;
+		}
+	
+		std::vector<Path> paths = this->Paths();
+		for (std::vector<Path>::iterator itPath = paths.begin(); itPath != paths.end(); itPath++)
+		{
+	        HeeksObj *object = itPath->Sketch();
+	        if (object)
+			{
+				for (HeeksObj *child = object->GetFirstChild(); child != NULL; child = object->GetNextChild())
+				{
+					sketch->Add( child, NULL );
+				}
+			}
+		} // End for
+	
+		if (Periodic())
+		{
+			if ((Concentricity() % 2) == 0)
+			{
+				if (pInterface->GetSketchOrder(sketch) != SketchOrderTypeCloseCW)
+				{
+					pInterface->ReOrderSketch(sketch, SketchOrderTypeCloseCW );
+				}
+			}
+			else
+			{
+				if (pInterface->GetSketchOrder(sketch) != SketchOrderTypeCloseCCW)
+				{
+					pInterface->ReOrderSketch(sketch, SketchOrderTypeCloseCCW );
+				}
+			}
+		}
+	
+	    return(sketch);
+	}
+	
+	
+	/**
+		Generate a Sketch representing this Path.
+	 */
+	HeeksObj *Cam::Path::Sketch() const
+	{
+		std::list<TopoDS_Edge> edges;
+		edges.push_back(m_edge);
+		#ifdef HEEKSCAD
+			return(heekscad_interface.ConvertEdgesToSketch(edges, 0.01));
+		#else
+			return(heeksCAD->ConvertEdgesToSketch(edges, 0.01));
+		#endif // HEEKSCAD
+	}
+#endif // HEEKS
 
 /**
 	Aggregate the lengths of all Path objects we contain.
@@ -1548,25 +1882,26 @@ bool Cam::ContiguousPath::Periodic() const
 }
 
 
-std::vector<Cam::Path> Cam::ContiguousPath::Paths()
+std::vector<Cam::Path> Cam::ContiguousPath::Paths() const
 {
+	ContiguousPath cpath(*this);	// Copy ourselves so that we can stay const.
 	std::set< std::vector<Cam::Path>::iterator > already_added;
 	std::vector<Cam::Path> paths;
 	std::vector<Cam::Path>::iterator itPath;
-	if (this->m_is_forwards)
+	if (cpath.m_is_forwards)
 	{
-		itPath = m_paths.begin();
+		itPath = cpath.m_paths.begin();
 	}
 	else
 	{
-		itPath = m_paths.end();
+		itPath = cpath.m_paths.end() - 1;
 	}
 	do
 	{
 		paths.push_back(*itPath);
 		already_added.insert(itPath);
 
-		itPath = Next(itPath);
+		itPath = cpath.Next(itPath);
 	} while (already_added.find(itPath) == already_added.end());
 
 	return(paths);
@@ -1695,7 +2030,7 @@ Standard_Real Cam::Path::EndParameter() const
 }
 
 
-Bnd_Box ContiguousPath::BoundingBox() const
+Bnd_Box Cam::ContiguousPath::BoundingBox() const
 {
 	if (m_pBoundingBox.get() == NULL)
 	{
@@ -1714,7 +2049,7 @@ Bnd_Box ContiguousPath::BoundingBox() const
 	return(*m_pBoundingBox);
 }
 
-Bnd_Box Paths::BoundingBox() const
+Bnd_Box Cam::Paths::BoundingBox() const
 {
 	Bnd_Box box;
 	for (std::vector<ContiguousPath>::const_iterator itPath = m_contiguous_paths.begin(); itPath != m_contiguous_paths.end(); itPath++)
@@ -1726,7 +2061,7 @@ Bnd_Box Paths::BoundingBox() const
 }
 
 
-std::set<Point> Corners(Bnd_Box box)
+std::set<Cam::Point> Corners(Bnd_Box box)
 {
 	std::set<Cam::Point> corners;
 	Standard_Real aXmin, aYmin, aZmin, aXmax, aYmax, aZmax;
@@ -1800,6 +2135,10 @@ Cam::Point Cam::ContiguousPath::MidpointForSurroundsCheck() const
 	This method returns TRUE if this contiguous path completely surrounds the rhs path.
 	We decide this by checking that the two paths don't have any intersecting points
 	and at least one of the rhs endpoints is 'inside' this path.
+
+	NOTE: We also need to make sure this is determined when looking at both objects
+	perpendicular to 'this' object's plane.  It's possible that the rhs is at a
+	different 'z' value than this object.  We don't want that to hinder our checks.
  */
 bool Cam::ContiguousPath::Surrounds( const Cam::ContiguousPath & rhs ) const
 {
@@ -1808,14 +2147,56 @@ bool Cam::ContiguousPath::Surrounds( const Cam::ContiguousPath & rhs ) const
 	if (ids_we_surround.find(rhs.ID()) != ids_we_surround.end()) return(true);	// We'v already figured this out.
 	if (ids_that_surround_us.find(ID()) != ids_that_surround_us.end()) return(true);	// We'v already figured this out.
 
-	if (BoundingBox().IsOut(rhs.BoundingBox())) return(false);
+	Cam::ContiguousPath lhs_cpath = this->ProjectOntoPlane( Plane() );
+	Cam::ContiguousPath rhs_cpath = rhs.ProjectOntoPlane( Plane() );
 
-	if (Intersect(rhs, true).size() > 0) return(false);
+	if (lhs_cpath.BoundingBox().IsOut(rhs_cpath.BoundingBox())) return(false);
+
+	if (lhs_cpath.Intersect(rhs_cpath, true).size() > 0) return(false);
+
+	/*
+	for (::size_t lhs_counter = 0; lhs_counter < m_paths.size(); lhs_counter++)
+	{
+		for (::size_t rhs_counter = 0; rhs_counter < rhs.m_paths.size(); rhs_counter++)
+		{
+			IntTools_BeanBeanIntersector intersector(m_paths[lhs_counter].Edge(), rhs.m_paths[rhs_counter].Edge());
+			intersector.Perform();
+			if (intersector.IsDone())
+			{
+				if (intersector.Result().Length() > 0) return(false);
+			}
+		} // End for
+	} // End for
+	*/
 
 	// The first test has passed.  They could be sitting next to each other.  Look at
 	// any point on the RHS shape and see if it's inside this shape.
-	bool surrounds = Surrounds( rhs.MidpointForSurroundsCheck() );
-
+	bool surrounds = lhs_cpath.Surrounds( rhs_cpath.MidpointForSurroundsCheck() );
+	if (surrounds == true)
+	{
+		/*
+		#ifdef HEEKSCNC
+		static int count=0;
+		count++;
+		{
+			Cam::ContiguousPath temp(*this);
+			HeeksObj *lhsSketch = temp.Sketch();
+			wxString lhsTitle;
+			lhsTitle << _T("lhs ") << count;
+			lhsSketch->OnEditString(lhsTitle);
+			heeksCAD->Add(lhsSketch,NULL);
+		}
+		{
+			Cam::ContiguousPath temp(rhs);
+			HeeksObj *lhsSketch = temp.Sketch();
+			wxString lhsTitle;
+			lhsTitle << _T("rhs ") << count;
+			lhsSketch->OnEditString(lhsTitle);
+			heeksCAD->Add(lhsSketch,NULL);
+		}
+		#endif
+		*/
+	}
 	return( surrounds );
 }
 
@@ -1870,6 +2251,8 @@ bool Cam::ContiguousPath::Surrounds(const Cam::Point point) const
 
 				if (temp.size() > 0)
 				{
+					// Bnd_Box box = temp[0].BoundingBox();
+
 					// Construct a line from this point to a little past the edge of the bounding box.  We then
 					// want to intersect this line with every path within this ContiguousPath object.  If we end up
 					// with an even number of intersections then the point is outside the ContiguousPath.  Otherwise
@@ -1884,6 +2267,9 @@ bool Cam::ContiguousPath::Surrounds(const Cam::Point point) const
 					aBuilder.MakeVertex (start, adjusted_point.Location(), Cam::GetTolerance());
 					start.Orientation (TopAbs_REVERSED);
 
+					// Standard_Real aXmin, aYmin, aZmin, aXmax, aYmax, aZmax;
+					// box.Get(aXmin, aYmin, aZmin, aXmax, aYmax, aZmax);
+
 					Cam::Point best_end_point = MidpointForSurroundsCheck();
 					best_end_point.SetZ( StartPoint().Z() );
 
@@ -1897,8 +2283,30 @@ bool Cam::ContiguousPath::Surrounds(const Cam::Point point) const
 					Cam::Paths line;
 					line.Add(edge.Edge());
 
+					/*
+					#ifdef HEEKSCNC
+					if (count == 3)
+					{
+						heeksCAD->Add( line.Sketch(), NULL );
+						heeksCAD->Add( temp.Sketch(), NULL );
+					}
+					#endif
+					*/
+
 					// Now accumulate all the intersection points.
 					std::set<Cam::Point> intersections = temp[0].Intersect(line[0], false);
+
+					/*
+					for (std::set<Cam::Point>::iterator itPoint = intersections.begin(); itPoint != intersections.end(); itPoint++)
+					{
+					#ifdef HEEKSCNC
+						if (count == 3)
+						{
+							heeksCAD->Add( heeksCAD->NewPoint(*itPoint), NULL );
+						}
+					#endif
+					}
+					*/
 
 					if (intersections.size() == 0) return(false);
 					return((intersections.size() % 2) != 0);
@@ -1918,6 +2326,24 @@ bool Cam::ContiguousPath::Surrounds(const Cam::Point point) const
 
 	return(false);	
 }
+
+/**
+	Returns true if ANY of the contiguous paths contained within this
+	object surround the specified point.
+ */
+bool Cam::Paths::Surrounds( const Cam::Point point ) const
+{
+	for (::size_t i=0; i<size(); i++)
+	{
+		if ((*this)[i].Surrounds( point ))
+		{
+			return(true);
+		}
+	}
+
+	return(false);
+}
+
 
 /**
 	Return a list of distinct intersection points between this and the rhs path.
@@ -1944,7 +2370,7 @@ std::set<Cam::Point> Cam::Path::Intersect( const Cam::Path & rhs, const bool sto
 				{
 					BRepAdaptor_Curve curve(this->Edge());
 					gp_Pnt point = curve.Value(ranges(index).First());
-					intersections.insert( point );
+					intersections.insert(point);
 					if (stop_after_first_point) return(intersections);
 				}
 			}
@@ -1958,24 +2384,11 @@ std::set<Cam::Point> Cam::Path::Intersect( const Cam::Path & rhs, const bool sto
 	return(intersections);
 }
 
-
-/**
-	Project the wire(s) onto a plane and intersect the resultant wires.  For each of those intersections, project the point
-	back up perpendicular to that plane and find the intersection points on 'this' object (only).
- */
-std::set<Cam::Point> Cam::ContiguousPath::Intersect( const Cam::ContiguousPath & rhs, const bool stop_after_first_point /* = false */ ) const
+double Cam::ContiguousPath::LargestDimension() const
 {
-	std::set<Cam::Point> results;
-
-	// We need to project onto a face that is large enough to hold the whole wire and we need to
-	// extend a line from that face to the wire.  Use the bounding boxes to get the largest of
-	// all dimensions and use that as a 'largest' value to make sure our faces and lines are
-	// large/long enough.
-
 	Standard_Real largest(0.0);
 	std::list<Bnd_Box> boxes;
 	boxes.push_back(BoundingBox());
-	boxes.push_back(rhs.BoundingBox());
 
 	for (std::list<Bnd_Box>::iterator itBox = boxes.begin(); itBox != boxes.end(); itBox++)
 	{
@@ -1991,20 +2404,33 @@ std::set<Cam::Point> Cam::ContiguousPath::Intersect( const Cam::ContiguousPath &
 		if (z > largest) largest = z;
 	}
 
-	if (Plane().SquareDistance(rhs.Plane()) > largest)
+	return(largest);
+}
+
+Cam::ContiguousPath Cam::ContiguousPath::ProjectOntoPlane( const gp_Pln plane ) const
+{
+	Cam::ContiguousPath planar_cpath;
+
+	// We need to project onto a face that is large enough to hold the whole wire and we need to
+	// extend a line from that face to the wire.  Use the bounding boxes to get the largest of
+	// all dimensions and use that as a 'largest' value to make sure our faces and lines are
+	// large/long enough.
+
+	double largest = this->LargestDimension();
+	if (Plane().SquareDistance(plane) > largest)
 	{
-		largest = Plane().SquareDistance(rhs.Plane());
+		largest = Plane().SquareDistance(plane);
 	}
 
-	if (Plane().SquareDistance(rhs.Plane()) > 0.001)
+	if (Plane().SquareDistance(plane) > 0.001)
 	{
 		try
 		{
 			// Project the right hand edge onto this object's plane before looking for intersections.
-			BRepBuilderAPI_MakeFace face_maker(Plane(), -2.0 * largest, +2.0 * largest, -2.0 * largest, +2.0 * largest);
+			BRepBuilderAPI_MakeFace face_maker(plane, -2.0 * largest, +2.0 * largest, -2.0 * largest, +2.0 * largest);
 			if (face_maker.IsDone())
 			{
-				BRepProj_Projection projection( rhs.Wire(), face_maker.Face(), Plane().Axis().Direction() );
+				BRepProj_Projection projection( Wire(), face_maker.Face(), plane.Axis().Direction() );
 				if (projection.IsDone())
 				{
 					Cam::Paths temp;
@@ -2014,27 +2440,9 @@ std::set<Cam::Point> Cam::ContiguousPath::Intersect( const Cam::ContiguousPath &
 						projection.Next();
 					} // End while
 
-					for (::size_t i=0; i<temp.size(); i++)
+					if (temp.size() > 0)
 					{
-						std::set<Cam::Point> points = Intersect(temp[i], stop_after_first_point);
-						for (std::set<Cam::Point>::iterator itPoint = points.begin(); itPoint != points.end(); itPoint++)
-						{
-							// Project these points back perpendicular to this Plane() and find where such lines intersect
-							// this object.
-
-							Cam::Point start(*itPoint);
-							Cam::Point end(*itPoint);
-							start.Adjustment( Plane().Axis().Direction(), -2.0 * largest );
-							end.Adjustment( Plane().Axis().Direction(), +2.0 * largest );
-
-							Cam::Path projection_line(Cam::Edge( start.Location(), end.Location() ));
-							for (std::vector<Path>::const_iterator itPath = m_paths.begin(); itPath != m_paths.end(); itPath++)
-							{
-								std::set<Cam::Point> pts = itPath->Intersect(projection_line, stop_after_first_point);
-								std::copy( pts.begin(), pts.end(), std::inserter( results, results.end() ));
-								if ((pts.size() > 0) && (stop_after_first_point)) return(results);
-							}
-						}
+						planar_cpath = temp[0];
 					}
 				}
 			}
@@ -2048,15 +2456,64 @@ std::set<Cam::Point> Cam::ContiguousPath::Intersect( const Cam::ContiguousPath &
 	else
 	{
 		// They're on the same plane so just intersect all the edges.
-		if (BoundingBox().IsOut(rhs.BoundingBox())) return(results);
+		planar_cpath = *this;
+	}
 
-		for (std::vector<Path>::const_iterator itPath = m_paths.begin(); itPath != m_paths.end(); itPath++)
+	return(planar_cpath);
+}
+
+
+
+// Project the wire(s) onto a plane and intersect the resultant wires.  For each of those intersections, project the point
+// back up perpendicular to that plane and find the intersection points on 'this' object (only).
+// i.e. find the intersections of the two ContiguousPath objects when viewed perpendicular to this
+// object's plane.
+
+std::set<Cam::Point> Cam::ContiguousPath::Intersect( const Cam::ContiguousPath & rhs, const bool stop_after_first_point /* = false */ ) const
+{
+	std::set<Cam::Point> results;
+
+	double largest = this->LargestDimension();
+
+	// We need to project onto a face that is large enough to hold the whole wire and we need to
+	// extend a line from that face to the wire.  Use the bounding boxes to get the largest of
+	// all dimensions and use that as a 'largest' value to make sure our faces and lines are
+	// large/long enough.
+
+	Cam::ContiguousPath planar_lhs = this->ProjectOntoPlane( this->Plane() );
+	Cam::ContiguousPath planar_rhs = rhs.ProjectOntoPlane( this->Plane() );
+
+	// NOTE: Even though we're projecting the paths onto the same plane, we can't just use the
+	// Bnd_Box::IsOut() method to check for encapsulation and/or overlap because the Bnd_Box class
+	// doesn't employ a tolerance when comparing values but the rounding errors produced
+	// by the ProjectOntoPlane() method require tolerances to be taken into account.
+	//
+	// Go ahead and intersect the resultant shapes (while using tolerances to compare coordinates)
+	// and then project those intersection points back up to the original path's edges to find
+	// the REAL intersections (when viewed perpendicular to the plane of the original path)
+
+	for (std::vector<Path>::const_iterator itPath = planar_lhs.m_paths.begin(); itPath != planar_lhs.m_paths.end(); itPath++)
+	{
+		for (std::vector<Path>::const_iterator itRhsPath = planar_rhs.m_paths.begin(); itRhsPath != planar_rhs.m_paths.end(); itRhsPath++)
 		{
-			for (std::vector<Path>::const_iterator itRhsPath = rhs.m_paths.begin(); itRhsPath != rhs.m_paths.end(); itRhsPath++)
+			std::set<Cam::Point> points = itPath->Intersect( *itRhsPath );
+			for (std::set<Cam::Point>::iterator itPoint = points.begin(); itPoint != points.end(); itPoint++)
 			{
-				std::set<Cam::Point> pts = itPath->Intersect( *itRhsPath );
-				std::copy( pts.begin(), pts.end(), std::inserter( results, results.end() ));
-				if ((pts.size() > 0) && (stop_after_first_point)) return(results);
+				// Project these points back perpendicular to this Plane() and find where such lines intersect
+				// this object.
+
+				Cam::Point start(*itPoint);
+				Cam::Point end(*itPoint);
+				start.Adjustment( Plane().Axis().Direction(), -2.0 * largest );
+				end.Adjustment( Plane().Axis().Direction(), +2.0 * largest );
+
+				Cam::Path projection_line(Cam::Edge( start.Location(), end.Location() ));
+				for (std::vector<Path>::const_iterator itPath = m_paths.begin(); itPath != m_paths.end(); itPath++)
+				{
+					std::set<Cam::Point> pts = itPath->Intersect(projection_line, stop_after_first_point);
+					std::copy( pts.begin(), pts.end(), std::inserter( results, results.end() ) );
+					if ((pts.size() > 0) && (stop_after_first_point)) return(results);
+				}
 			}
 		}
 	}
@@ -2318,7 +2775,7 @@ std::pair<gp_Pnt, gp_Vec> Cam::ContiguousPath::Nearest(const gp_Pnt reference_lo
 	ContiguousPath cpath(*this);	// Duplicate so that we don't affect ourselves.
 
 	std::vector<Path>::iterator itBestSoFar = cpath.m_paths.begin();
-	Standard_Real best_u_value;
+	Standard_Real best_u_value = itBestSoFar->EndParameter();
 	std::pair<gp_Pnt, gp_Vec> nearest;
 
 	for (std::vector<Path>::iterator itPath = cpath.m_paths.begin(); itPath != cpath.m_paths.end(); itPath++)
@@ -2356,14 +2813,6 @@ std::pair<gp_Pnt, gp_Vec> Cam::ContiguousPath::Nearest(const gp_Pnt reference_lo
 
 		*pDistanceAlong = distance_along;
 	}
-
-	/*
-	#ifdef HEEKSCAD
-		double p[3];
-		Cam::Point( nearest.first ).ToDoubleArray(p);
-		heekscad_interface.Add( heekscad_interface.NewPoint(p), NULL );
-	#endif
-	*/
 
 	return(nearest);
 }
@@ -2445,7 +2894,12 @@ Cam::ContiguousPath Cam::Paths::GetByID( const Cam::ContiguousPath::Id_t id ) co
 		if (itPath->ID() == id) return(*itPath);
 	}
 
-	throw(std::runtime_error("No contiguous paths found for ID"));
+	#ifdef HEEKS
+		throw(std::runtime_error(Ttc(_("No contiguous paths found for ID"))));
+	#else
+		// FreeCAD
+		throw(std::runtime_error("No contiguous paths found for ID"));
+	#endif
 }
 
 gp_Pln Cam::ContiguousPath::Plane() const
@@ -2744,7 +3198,7 @@ void Path::Align( CFixture fixture )
 #endif // HEEKSCNC
 
 
-Path Path::Section( const Standard_Real start_distance, const Standard_Real end_distance ) const
+Cam::Path Path::Section( const Standard_Real start_distance, const Standard_Real end_distance ) const
 {
 	Standard_Real start_u = Proportion(start_distance / Length());
 	Standard_Real end_u   = Proportion(end_distance / Length());
@@ -2921,7 +3375,7 @@ double deflection( const Cam::Point start, const Cam::Point middle, const Cam::P
 // Recursively calculate the start, middle and end points for the curve.  If the distance from the middle point to the
 // line joining the start and end points is too large then recursively call this routine for each of the two
 // halves of the curve.
-std::list<Point> InterpolateCurve( BRepAdaptor_Curve curve, const Standard_Real start_u, const Standard_Real end_u, const double max_deviation )
+std::list<Cam::Point> InterpolateCurve( BRepAdaptor_Curve curve, const Standard_Real start_u, const Standard_Real end_u, const double max_deviation )
 {
 	std::list<Cam::Point> points;
 	
@@ -2960,18 +3414,6 @@ std::list<Point> InterpolateCurve( BRepAdaptor_Curve curve, const Standard_Real 
 		points.push_back(end);
 	}
 
-	// For debug only...
-	/*
-	#ifdef HEEKSCNC
-		for (std::list<Cam::Point>::iterator itPoint = points.begin(); itPoint != points.end(); itPoint++)
-		{
-			double p[3];
-			itPoint->ToDoubleArray(p);
-			heeksCAD->Add( heeksCAD->NewPoint(p), NULL );
-		}
-	#endif
-	*/
-
 	points.unique();
 	return(points);
 }
@@ -2984,7 +3426,7 @@ std::list<Point> InterpolateCurve( BRepAdaptor_Curve curve, const Standard_Real 
 	more complex children into a series of lines that are no more than 'max_deviation' from the original
 	object's path.
  */
-ContiguousPath ContiguousPath::InterpolateLines(const double max_deviation, const bool retain_simple_curve_types /* = false */ ) const
+Cam::ContiguousPath ContiguousPath::InterpolateLines(const double max_deviation, const bool retain_simple_curve_types /* = false */ ) const
 {
 	ContiguousPath new_path;
 
@@ -3246,6 +3688,7 @@ area::CCurve ContiguousPath::AreaCurve()
 					curve.append(*itVertex);
 				}
 			} // End for
+
 			processed_paths.insert( itPath );
 		} // End if -then
 
@@ -3330,28 +3773,43 @@ void Paths::Split( const Cam::Paths &areas, Cam::Paths *pInside, Cam::Paths *pOu
 	std::list<ContiguousPath> sections = Split( areas );
 	for (std::list<ContiguousPath>::iterator itSection = sections.begin(); itSection != sections.end(); itSection++)
 	{
+		itSection->Split( areas, pInside, pOutside );
+	}
+}
+
+
+void ContiguousPath::Split( const Cam::Paths &areas, Cam::Paths *pInside, Cam::Paths *pOutside ) const
+{
+	ContiguousPath this_cpath(*this);	// We want to be 'const' so copy ourselves first.
+
+	std::list<ContiguousPath> cpaths = this_cpath.Split( areas );
+	for (std::list<ContiguousPath>::iterator itCPath = cpaths.begin(); itCPath != cpaths.end(); itCPath++)
+	{
 		bool found = false;
 		for (::size_t i=0; (found == false) && (i<areas.size()); i++)
 		{
-			if (areas[i].Surrounds(*itSection))
+			if (areas[i].Surrounds(itCPath->MidpointForSurroundsCheck()))
 			{
 				found = true;
-				if (pInside) 
-				{
-					std::vector<Path> paths = itSection->Paths();
-					for (std::vector<Path>::iterator itPath = paths.begin(); itPath != paths.end(); itPath++)
-					{
-						pInside->Add( *itPath );
-					}
-				}
 			}
 		}		
-		if (! found)
+		if (found)
+		{
+			if (pInside) 
+			{
+				std::vector<Path> paths = itCPath->Paths();
+				for (std::vector<Path>::iterator itPath = paths.begin(); itPath != paths.end(); itPath++)
+				{
+					pInside->Add( *itPath );
+				}
+			}
+		}
+		else
 		{
 			// This section is not inside any of the areas.
 			if (pOutside) 
 			{
-				std::vector<Path> paths = itSection->Paths();
+				std::vector<Path> paths = itCPath->Paths();
 				for (std::vector<Path>::iterator itPath = paths.begin(); itPath != paths.end(); itPath++)
 				{
 					pOutside->Add( *itPath );
@@ -3377,25 +3835,18 @@ std::list<ContiguousPath> Paths::Split( const Cam::Paths &areas ) const
 std::list<ContiguousPath> ContiguousPath::Split( const Cam::Paths &area )
 {
 	std::list<ContiguousPath> sections;
+	typedef Standard_Real Distance_t;
+	std::set< Distance_t > distances;
+
 	for (::size_t i=0; i<area.size(); i++)
 	{
 		ContiguousPath cpath(area[i]);
-
-		/*
-		#ifdef HEEKSCAD
-			double p[3];
-			StartPoint().ToDoubleArray(p);
-			heekscad_interface.Add( heekscad_interface.NewPoint(p), NULL );
-		#endif
-		*/
 
 		std::set<Point> points = this->Intersect(cpath, false);
 		if (points.size() > 0)
 		{
 			// They do intersect.  Get a list of distance values representing the various start/end sections
-			typedef Standard_Real Distance_t;
 			std::map< Distance_t, Point > sub_sections;
-			std::set< Distance_t > distances;
 
 			if (Periodic() == false)
 			{
@@ -3417,23 +3868,23 @@ std::list<ContiguousPath> ContiguousPath::Split( const Cam::Paths &area )
 			{
 				distances.insert( itLocation->first );
 			}
-
-			for (std::set<Distance_t>::const_iterator itDistance = distances.begin(); itDistance != distances.end(); itDistance++)
-			{
-				std::set<Distance_t>::const_iterator itNextDistance = itDistance;
-				itNextDistance++;
-				if (itNextDistance != distances.end())
-				{
-					sections.push_back( Section( *itDistance, *itNextDistance ) );
-				}
-			}
-
-			if (Periodic())
-			{
-				// Add the wrap around section as well.
-				sections.push_back( Section( *(distances.rbegin()), *(distances.begin()) ));
-			}
 		}
+	}
+
+	for (std::set<Distance_t>::const_iterator itDistance = distances.begin(); itDistance != distances.end(); itDistance++)
+	{
+		std::set<Distance_t>::const_iterator itNextDistance = itDistance;
+		itNextDistance++;
+		if (itNextDistance != distances.end())
+		{
+			sections.push_back( Section( *itDistance, *itNextDistance ) );
+		}
+	}
+
+	if ((Periodic()) && (distances.size() > 1))
+	{
+		// Add the wrap around section as well.
+		sections.push_back( Section( *(distances.rbegin()), *(distances.begin()) ));
 	}
 	
 	return(sections);
@@ -3465,59 +3916,118 @@ std::set<int> Cam::Paths::GetConcentricities() const
 }
 
 
-QString Cam::Paths::KiCadBoardOutline(const int layer /* = 28 */, const int trace_width /* = 150 */) const
-{
-	QString description;
-
-	for (std::vector<ContiguousPath>::const_iterator itPath = m_contiguous_paths.begin(); itPath != m_contiguous_paths.end(); itPath++)
+#ifdef HEEKS
+	wxString Paths::KiCadBoardOutline(const int layer /* = 28 */, const int trace_width /* = 150 */) const
 	{
-		// The board outline MUST be defined as a series of straight lines.
-		Cam::ContiguousPath lines(itPath->InterpolateLines(0.01 * 25.4, false));
-		description.append( lines.KiCadBoardOutline(layer,trace_width) );
-	}
-
-	return(description);
-}
-
-QString Cam::ContiguousPath::KiCadBoardOutline(const int layer, const int trace_width) const
-{
-	QString description;
-
-	for (std::vector<Path>::const_iterator itPath = m_paths.begin(); itPath != m_paths.end(); itPath++)
-	{
-		description += itPath->KiCadBoardOutline(layer, trace_width);
-	}
-
-	return(description);
-}
-
-/**
-	By the time we get here, we KNOW that we will ONLY contain straight lines.
- */
-QString Cam::Path::KiCadBoardOutline(const int layer, const int trace_width) const
-{
-	switch (Curve().GetType())
-	{
-	case GeomAbs_Line:
+		wxString description;
+	
+		for (std::vector<ContiguousPath>::const_iterator itPath = m_contiguous_paths.begin(); itPath != m_contiguous_paths.end(); itPath++)
 		{
-			QString description;
-			description = QString::fromUtf8("$DRAWSEGMENT\n")
-						+ QString::fromUtf8("Po 0 ")
-						+ QString().arg(int((StartPoint().Location().X() / 25.4) * 10000.0)) + QString::fromUtf8(" ")
-						+ QString().arg(int(((-1.0 * StartPoint().Location().Y()) / 25.4) * 10000.0)) + QString::fromUtf8(" ")
-						+ QString().arg(int((EndPoint().Location().X() / 25.4) * 10000.0)) + QString::fromUtf8(" ")
-						+ QString().arg(int(((-1.0 * EndPoint().Location().Y() / 25.4)) * 10000.0)) + QString::fromUtf8(" ")
-						+ QString().arg(trace_width) + QString::fromUtf8("\n")
-						+ QString::fromUtf8("De ") + QString().arg(layer) + QString::fromUtf8(" 0 900 0 0\n")
-						+ QString::fromUtf8("$EndDRAWSEGMENT\n");
-			return(description);
+			// The board outline MUST be defined as a series of straight lines.
+			Cam::ContiguousPath lines(itPath->InterpolateLines(0.01 * 25.4, false));
+			description.append( lines.KiCadBoardOutline(layer,trace_width) );
 		}
-		break;
-
-default:
-		return(QString::fromUtf8(""));	// Should NEVER get here.
+	
+		return(description);
 	}
-}
+	
+	wxString ContiguousPath::KiCadBoardOutline(const int layer, const int trace_width) const
+	{
+		wxString description;
+	
+		for (std::vector<Path>::const_iterator itPath = m_paths.begin(); itPath != m_paths.end(); itPath++)
+		{
+			description << itPath->KiCadBoardOutline(layer, trace_width);
+		}
+	
+		return(description);
+	}
+	
+	/**
+		By the time we get here, we KNOW that we will ONLY contain straight lines.
+	 */
+	wxString Path::KiCadBoardOutline(const int layer, const int trace_width) const
+	{
+		switch (Curve().GetType())
+		{
+		case GeomAbs_Line:
+			{
+				wxString description;
+				description << _T("$DRAWSEGMENT\n")
+							<< _T("Po 0 ")
+							<< int((StartPoint().Location().X() / 25.4) * 10000.0) << _T(" ")
+							<< int(((-1.0 * StartPoint().Location().Y()) / 25.4) * 10000.0) << _T(" ")
+							<< int((EndPoint().Location().X() / 25.4) * 10000.0) << _T(" ")
+							<< int(((-1.0 * EndPoint().Location().Y() / 25.4)) * 10000.0) << _T(" ")
+	
+	
+							<< trace_width << _T("\n")
+							<< _T("De ") << layer << _T(" 0 900 0 0\n")
+							<< _T("$EndDRAWSEGMENT\n");
+				return(description);
+			}
+			break;
+	
+	default:
+			return(_T(""));	// Should NEVER get here.
+		}
+	}
+#else
+	// FreeCAD
+	QString Cam::Paths::KiCadBoardOutline(const int layer /* = 28 */, const int trace_width /* = 150 */) const
+	{
+		QString description;
+	
+		for (std::vector<ContiguousPath>::const_iterator itPath = m_contiguous_paths.begin(); itPath != m_contiguous_paths.end(); itPath++)
+		{
+			// The board outline MUST be defined as a series of straight lines.
+			Cam::ContiguousPath lines(itPath->InterpolateLines(0.01 * 25.4, false));
+			description.append( lines.KiCadBoardOutline(layer,trace_width) );
+		}
+	
+		return(description);
+	}
+	
+	QString Cam::ContiguousPath::KiCadBoardOutline(const int layer, const int trace_width) const
+	{
+		QString description;
+	
+		for (std::vector<Path>::const_iterator itPath = m_paths.begin(); itPath != m_paths.end(); itPath++)
+		{
+			description += itPath->KiCadBoardOutline(layer, trace_width);
+		}
+	
+		return(description);
+	}
+	
+	/**
+		By the time we get here, we KNOW that we will ONLY contain straight lines.
+	 */
+	QString Cam::Path::KiCadBoardOutline(const int layer, const int trace_width) const
+	{
+		switch (Curve().GetType())
+		{
+		case GeomAbs_Line:
+			{
+				QString description;
+				description = QString::fromUtf8("$DRAWSEGMENT\n")
+							+ QString::fromUtf8("Po 0 ")
+							+ QString().arg(int((StartPoint().Location().X() / 25.4) * 10000.0)) + QString::fromUtf8(" ")
+							+ QString().arg(int(((-1.0 * StartPoint().Location().Y()) / 25.4) * 10000.0)) + QString::fromUtf8(" ")
+							+ QString().arg(int((EndPoint().Location().X() / 25.4) * 10000.0)) + QString::fromUtf8(" ")
+							+ QString().arg(int(((-1.0 * EndPoint().Location().Y() / 25.4)) * 10000.0)) + QString::fromUtf8(" ")
+							+ QString().arg(trace_width) + QString::fromUtf8("\n")
+							+ QString::fromUtf8("De ") + QString().arg(layer) + QString::fromUtf8(" 0 900 0 0\n")
+							+ QString::fromUtf8("$EndDRAWSEGMENT\n");
+				return(description);
+			}
+			break;
+	
+	default:
+			return(QString::fromUtf8(""));	// Should NEVER get here.
+		}
+	}
+#endif
 
 
 /**
@@ -3745,5 +4255,56 @@ Paths::Locations_t Paths::PointLocationData(const Point reference_location_for_s
 	
 	return(*m_pPointLocationData);
 }
+
+
+std::vector<Cam::Point> Cam::ContiguousPath::Corners( const double angle_threshold ) const
+{
+	std::vector<Cam::Point> corners;
+
+	gp_Pln plane(Plane());
+	gp_Vec normal(plane.Axis().Direction());
+
+	std::vector<Cam::Path> contiguous_path = Paths();
+	for (std::vector<Cam::Path>::size_type j = 0; j<contiguous_path.size(); j++)
+	{
+		std::vector<Cam::Path>::size_type this_offset = j;
+		std::vector<Cam::Path>::size_type previous_offset = j-1;
+
+		if ((! Periodic()) && (j == 0)) break;
+		if ((Periodic()) && (j == 0)) previous_offset = contiguous_path.size()-1;
+
+		// We only want to machine the corners if the last tool movement and this tool movement were both
+		// on the XY plane.  i.e. their Z values were all the same.
+
+		Cam::Point pivot( contiguous_path[this_offset].StartPoint().Location() );
+
+		gp_Vec current( contiguous_path[this_offset].StartVector() );
+		gp_Vec previous( contiguous_path[previous_offset].EndVector() );
+
+		double direction_change_angle = current.AngleWithRef(previous, normal);
+		double direction_change_angle_degrees = direction_change_angle / (2.0 * M_PI) * 360.0;
+		if (CDouble(fabs(direction_change_angle_degrees)) >= CDouble(angle_threshold))
+		{
+			corners.push_back( contiguous_path[this_offset].StartPoint() );
+		}
+	} // End for
+
+	return(corners);
+}
+
+
+std::vector<Cam::Point> Cam::Paths::Corners( const double angle_threshold ) const
+{
+	std::vector<Cam::Point> corners;
+
+	for (::size_t i=0; i<size(); i++)
+	{
+		std::vector<Cam::Point> these_corners = m_contiguous_paths[i].Corners( angle_threshold );
+		std::copy( these_corners.begin(), these_corners.end(), std::inserter( corners, corners.end() ));
+	} // End for
+
+	return(corners);
+}
+
 
 } // End namespace Cam

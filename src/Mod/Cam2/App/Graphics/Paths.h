@@ -1,9 +1,34 @@
 
 #pragma once
 
-#include <PreCompiled.h>
+#if defined(HEEKSCAD) || defined(HEEKSCNC)
+	#ifndef HEEKS
+		#define HEEKS
+	#endif // HEEKS(anything)
 
-#include <QString>
+	#include "HeeksCADInterface.h"
+	#include "../libarea/Area.h"
+
+	#define CamExport
+
+	#ifdef HEEKSCAD
+		extern CHeeksCADInterface heekscad_interface;
+		#include "HeeksCAD.h"	
+	#else
+		// HEEKSCNC
+		#include "HeeksCNC.h"
+		#include "Program.h"
+		#include "Fixture.h"
+		extern CHeeksCADInterface* heeksCAD;		
+	#endif // HEEKSCAD
+#else
+	// FreeCAD
+	#include <PreCompiled.h>
+	#include <QString>
+	#include "Area.h"
+	#include "Feature.h"
+	#include "TPGFeature.h"
+#endif
 
 #include <TopoDS_Edge.hxx>
 #include <gp_Pnt.hxx>
@@ -16,15 +41,12 @@
 #include <BRepBuilderAPI_Copy.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Vertex.hxx>
+#include <TopoDS_Wire.hxx>
 #include <Bnd_Box.hxx>
 #include <gp_Circ.hxx>
 
 #include <set>
 #include <string>
-
-#include "Area.h"
-#include "Feature.h"
-#include "TPGFeature.h"
 
 namespace Cam
 {
@@ -51,6 +73,7 @@ namespace Cam
 	class CamExport Point : public gp_Ax2
 	{
 	public:
+		Point();
 		Point(const gp_Ax2 ax2);
 		Point(const gp_Pnt p);
 		Point(const double x, const double y, const double z);
@@ -80,8 +103,7 @@ namespace Cam
 		double Z(const bool in_drawing_units = false) const;
 
 		double Units() const;
-		double Tolerance() const;
-
+	
 		bool operator==( const Point & rhs ) const;
 		bool operator!=( const Point & rhs ) const;
 		bool operator<( const Point & rhs ) const;
@@ -91,6 +113,12 @@ namespace Cam
 		double XYDistance( const Point & rhs ) const;
 		double XZDistance( const Point & rhs ) const;
 		double YZDistance( const Point & rhs ) const;
+
+		double Distance( const Point & rhs ) const;
+		bool EqualForDirection( const gp_Dir direction, const Point & rhs ) const;
+
+		static double Tolerance();
+		static void Tolerance(const double tolerance);
 
 	private:
 		static double s_tolerance;
@@ -160,7 +188,7 @@ namespace Cam
 	CamExport std::list<TopoDS_Face> SubtractFaces( const TopoDS_Face lhs, const TopoDS_Face rhs );
 	CamExport Faces_t UnionFaces( const TopoDS_Face lhs, const TopoDS_Face rhs );
 	CamExport Faces_t UnionFaces( Faces_t faces );
-	CamExport bool FacesIntersect( const TopoDS_Face lhs, const TopoDS_Face rhs );
+	CamExport bool FacesIntersect( const TopoDS_Face lhs, const TopoDS_Face rhs, std::list<Cam::Point> *pIntersections = NULL );
 
 	CamExport TopoDS_Edge Edge( const Point start, const Point end, const gp_Circ circle );
 	CamExport TopoDS_Edge Edge( const Point start, const Point end );
@@ -237,6 +265,10 @@ namespace Cam
 			void Align( CFixture fixture );
 		#endif // HEEKSCNC
 
+		#ifdef HEEKS
+			HeeksObj *Sketch() const;
+		#endif
+
 		Path Section( const Standard_Real start_distance, const Standard_Real end_distance ) const;
 		BRepAdaptor_Curve & Curve() const;
 
@@ -247,7 +279,12 @@ namespace Cam
 		void Transform( const gp_Trsf transformation );
 		double DistanceAlong( const Standard_Real u ) const;
 
-		QString KiCadBoardOutline(const int layer, const int trace_width) const;
+		#ifdef HEEKS
+			wxString KiCadBoardOutline(const int layer, const int trace_width) const;
+		#else
+			// FreeCAD
+			QString KiCadBoardOutline(const int layer, const int trace_width) const;
+		#endif
 
 	private:
 		TopoDS_Edge m_edge;
@@ -257,7 +294,59 @@ namespace Cam
 		mutable Standard_Real m_tolerance;
 
 	public:
-		friend QString & operator<< ( QString & str, const Path & path );
+		#ifdef HEEKS
+			friend wxString & operator<< ( wxString & str, const Path & path )
+			{
+				str << _("<Path ");
+	
+				switch(path.Curve().GetType())
+				{
+				case GeomAbs_Line:
+					str << _("type=\"GeomAbs_Line\"");
+					break;
+	
+				case GeomAbs_Circle:
+					str << _("type=\"GeomAbs_Circle\"");
+					break;
+	
+				case GeomAbs_Ellipse:
+					str << _("type=\"GeomAbs_Ellipse\"");
+					break;
+	
+				case GeomAbs_Hyperbola:
+					str << _("type=\"GeomAbs_Hyperbola\"");
+					break;
+	
+				case GeomAbs_Parabola:
+					str << _("type=\"GeomAbs_Parabola\"");
+					break;
+	
+				case GeomAbs_BezierCurve:
+					str << _("type=\"GeomAbs_BezierCurve\"");
+					break;
+	
+				case GeomAbs_BSplineCurve:
+					str << _("type=\"GeomAbs_BSplineCurve\"");
+					break;
+	
+				case GeomAbs_OtherCurve:
+					str << _("type=\"GeomAbs_OtherCurve\"");
+					break;
+				}
+	
+				str << _T(", direction=\"") << (wxChar *) (path.m_is_forwards?_T("FORWARDS"):_T("BACKWARDS")) << _T("\"");
+				str << _T(", start_parameter=\"") << path.StartParameter() << _T("\"");
+				str << _T(", end_parameter=\"") << path.EndParameter() << _T("\"");
+	
+				str << _T(", start_point=\"") << path.StartPoint().X() << _T(",") << path.StartPoint().Y() << _T(",") << path.StartPoint().Z() << _T("\"");
+				str << _T(", end_point=\"") << path.EndPoint().X() << _T(",") << path.EndPoint().Y() << _T(",") << path.EndPoint().Z() << _T("\"/>\n");
+				return(str);
+			}
+		#else
+			// FreeCAD
+			friend QString & operator<< ( QString & str, const Path & path );
+		#endif
+
 	}; // End Path class definition
 
 	/**
@@ -305,7 +394,10 @@ namespace Cam
 
 		std::vector<Path>::iterator SetStartPoint( Cam::Point location );
 
-		// HeeksObj *Sketch(HeeksObj *sketch = NULL);
+		#ifdef HEEKS
+			HeeksObj *Sketch(HeeksObj *sketch = NULL) const;
+		#endif
+
 		void Reset();
 
 		Bnd_Box BoundingBox() const;
@@ -325,6 +417,8 @@ namespace Cam
 		Ids_t PathsThatWeSurround() const;
 		void PathsThatWeSurround( const Id_t id ) const;
 		Cam::Point MidpointForSurroundsCheck() const;
+		double LargestDimension() const;
+		Cam::ContiguousPath ProjectOntoPlane( const gp_Pln plane ) const;
 
 		void Transform( const gp_Trsf transformation );
 
@@ -332,17 +426,24 @@ namespace Cam
 			void Align( CFixture fixture );
 		#endif // HEEKSCNC
 
-		std::vector<Path> Paths();
+		std::vector<Path> Paths() const;
 		std::list<ContiguousPath> Split( const Cam::Paths &rhs );
+		void Split( const Cam::Paths &areas, Cam::Paths *pInside, Cam::Paths *pOutside ) const;
+		std::vector<Cam::Point> Corners( const double angle_threshold ) const;
 
 		area::CCurve AreaCurve();
 
-		QString KiCadBoardOutline(const int layer, const int trace_width) const;
+		#ifdef HEEKS
+			wxString KiCadBoardOutline(const int layer, const int trace_width) const;
+		#else
+			// FreeCAD
+			QString KiCadBoardOutline(const int layer, const int trace_width) const;
+		#endif
 
 	protected:
 		bool m_is_forwards;
 		std::vector<Path> m_paths;
-		
+
 		int m_concentricity;	// more positive the value indicates an inner (enclosed) polygon.
 		Id_t	m_id;
 		static Id_t s_next_available_id;
@@ -353,13 +454,35 @@ namespace Cam
 		mutable std::auto_ptr<TopoDS_Wire> m_wire;		// cache to save re-calculation when possible.
 
 	public:
-		friend QString & operator<< ( QString & str, const ContiguousPath & path );
+		#ifdef HEEKS
+			friend wxString & operator<< ( wxString & str, const ContiguousPath & path )
+			{
+				str << _("<ContiguousPath ") << _T(" num_paths=\"") << path.m_paths.size() << _T("\"");
+				str << _T(", direction=\"") << (wxChar *) (path.m_is_forwards?_T("FORWARDS"):_T("BACKWARDS")) << _T("\"") << _T(">\n");
+	
+				for (std::vector<Path>::const_iterator itPath = path.m_paths.begin(); itPath != path.m_paths.end(); itPath++)
+				{
+					str << *itPath;
+				}
+	
+				str << _("</ContiguousPath>\n");
+	
+				return(str);
+			}
+		#else
+			// FreeCAD
+			friend QString & operator<< ( QString & str, const ContiguousPath & path );
+		#endif
 	}; // End of ContiguousPath class definition.
 
 	class CamExport Paths
 	{
 	public:
 		Paths();
+		#ifdef HEEKS
+			Paths(HeeksObj *object);
+		#endif
+
 		Paths(const TopoDS_Shape shape);
 		Paths(ContiguousPath contiguous_path);
 		Paths(area::CArea &area);
@@ -375,8 +498,14 @@ namespace Cam
 
 		Path Next() const;
 		void Add(const Path path);
-		void Add(const Part::Feature *pFeature);
-		void Add(const QStringList input_geometry);
+		#ifdef HEEKS
+			void Add(HeeksObj *object);
+		#else
+			// FreeCAD
+			void Add(const Part::Feature *pFeature);
+			void Add(const QStringList input_geometry);
+		#endif
+
 		void Add(const TopoDS_Shape shape);
 		void Add(const TopoDS_Edge edge);
 		void Add(const TopoDS_Vertex vertex);
@@ -388,6 +517,10 @@ namespace Cam
 			void Align( CFixture fixture );
 		#endif // HEEKSCNC
 
+		#ifdef HEEKS
+        	HeeksObj *Sketch() const;
+		#endif
+
 		void Sort(const bool force = false);
 
 		area::CArea Area();
@@ -397,12 +530,21 @@ namespace Cam
 		void Split( const Cam::Paths &areas, Cam::Paths *pInside, Cam::Paths *pOutside ) const;
 		std::list<ContiguousPath> Split( const Cam::Paths &rhs ) const;
 		std::set<int> GetConcentricities() const;
-		QString KiCadBoardOutline(const int layer = 28, const int trace_width = 150) const;
+		#ifdef HEEKS
+			wxString KiCadBoardOutline(const int layer = 28, const int trace_width = 150) const;
+		#else
+			// FreeCAD
+			QString KiCadBoardOutline(const int layer = 28, const int trace_width = 150) const;
+		#endif
+
+		std::vector<Cam::Point> Corners( const double angle_threshold ) const;
 
 		Faces_t Faces(const bool subtract_nested_faces = true ) const;
 
 		typedef std::vector<Point> Locations_t;
 		Locations_t PointLocationData(const Point reference_location_for_sorting = Point(0.0, 0.0, 0.0)) const;
+
+		bool Surrounds( const Cam::Point point ) const;
 
 	protected:
 		std::vector<ContiguousPath> m_contiguous_paths;
