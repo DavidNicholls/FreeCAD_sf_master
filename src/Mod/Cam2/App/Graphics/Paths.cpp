@@ -2044,6 +2044,10 @@ Bnd_Box Cam::ContiguousPath::BoundingBox() const
 				m_pBoundingBox->Add(itPoint->Location());
 			}		
 		}
+		
+		// Allow the resultant bounding box to match up within the tolerance we're using
+		// for the rest of the graphics processing.
+		m_pBoundingBox->SetGap(Cam::GetTolerance());
 	}
 
 	return(*m_pBoundingBox);
@@ -2056,6 +2060,10 @@ Bnd_Box Cam::Paths::BoundingBox() const
 	{
 		box.Add( itPath->BoundingBox() );
 	}
+
+	// Allow the resultant bounding box to match up within the tolerance we're using
+	// for the rest of the graphics processing.
+	box.SetGap(Cam::GetTolerance());
 
 	return(box);
 }
@@ -2474,6 +2482,8 @@ std::set<Cam::Point> Cam::ContiguousPath::Intersect( const Cam::ContiguousPath &
 	std::set<Cam::Point> results;
 
 	double largest = this->LargestDimension();
+	double rhs_largest = rhs.LargestDimension();
+	if (largest < rhs_largest) largest = rhs_largest;
 
 	// We need to project onto a face that is large enough to hold the whole wire and we need to
 	// extend a line from that face to the wire.  Use the bounding boxes to get the largest of
@@ -2483,11 +2493,8 @@ std::set<Cam::Point> Cam::ContiguousPath::Intersect( const Cam::ContiguousPath &
 	Cam::ContiguousPath planar_lhs = this->ProjectOntoPlane( this->Plane() );
 	Cam::ContiguousPath planar_rhs = rhs.ProjectOntoPlane( this->Plane() );
 
-	// NOTE: Even though we're projecting the paths onto the same plane, we can't just use the
-	// Bnd_Box::IsOut() method to check for encapsulation and/or overlap because the Bnd_Box class
-	// doesn't employ a tolerance when comparing values but the rounding errors produced
-	// by the ProjectOntoPlane() method require tolerances to be taken into account.
-	//
+	if (planar_lhs.BoundingBox().IsOut(planar_rhs.BoundingBox())) return(results);
+
 	// Go ahead and intersect the resultant shapes (while using tolerances to compare coordinates)
 	// and then project those intersection points back up to the original path's edges to find
 	// the REAL intersections (when viewed perpendicular to the plane of the original path)
