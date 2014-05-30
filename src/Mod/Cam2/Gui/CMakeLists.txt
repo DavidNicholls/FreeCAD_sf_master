@@ -36,6 +36,7 @@ else(MSVC)
 endif(MSVC)
 
 qt4_add_resources(CamGui_SRCS Resources/Cam.qrc)
+link_directories(${OCC_LIBRARY_DIR})
 
 set(CamGui_MOC_HDRS
     TaskDialog/TaskDlgEditCamFeature.h

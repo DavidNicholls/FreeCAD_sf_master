@@ -25,7 +25,6 @@ if(MSVC)
             optimized MSVCPRT.LIB)
 else(MSVC)
 	set(AreaClipper_LIBS
-	    boost_python
 	    ${PYTHON_LIBRARIES}
 	    ${Boost_LIBRARIES})
 endif(MSVC)
