@@ -784,8 +784,8 @@ namespace Cam
 											gp_Pnt from, to;
 
 											BRepAdaptor_Curve curve(edge1);
-											curve.D0(intersector.CommonParts().Value(i).First(), from);
-											curve.D0(intersector.CommonParts().Value(i).Last(), to);
+											curve.D0(intersector.CommonParts().Value(i).Range1().First(), from);
+											curve.D0(intersector.CommonParts().Value(i).Range1().Last(), to);
 
 											pIntersections->push_back( Cam::Point(from) );
 											pIntersections->push_back( Cam::Point(to) );
@@ -2374,9 +2374,10 @@ std::set<Cam::Point> Cam::Path::Intersect( const Cam::Path & rhs, const bool sto
 					{
 						
 						BRepAdaptor_Curve curve(this->Edge());
-						gp_Pnt point = curve.Value(intersector.CommonParts().Value(index).Range1().First());
-						intersections.insert(point);
+						intersections.insert(curve.Value(intersector.CommonParts().Value(index).Range1().First()));
 						if (stop_after_first_point) return(intersections);
+
+						intersections.insert(curve.Value(intersector.CommonParts().Value(index).Range1().Last()));
 					}
 				}
 			}
