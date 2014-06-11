@@ -33,6 +33,7 @@
 
 #include <exception>
 
+#include <Standard_Version.hxx>
 #include <ShapeExtend_Status.hxx>
 #include <Standard_Boolean.hxx>
 #include <BRep_Builder.hxx>
@@ -108,7 +109,12 @@
 #include <ShapeFix_Shape.hxx>
 #include <GProp_GProps.hxx>
 #include <BRepGProp.hxx>
-#include <IntTools_BeanBeanIntersector.hxx>
+
+#if OCC_VERSION_HEX >= 0x060701
+	#include <IntTools_EdgeEdge.hxx>
+#else
+	#include <IntTools_BeanBeanIntersector.hxx>
+#endif // OCC_VERSION
 
 #ifndef M_PI
 	#define M_PI PI
@@ -764,30 +770,59 @@ namespace Cam
 
 						if (! edge2.IsNull())
 						{
-							IntTools_BeanBeanIntersector intersector(edge1, edge2);
-							intersector.Perform();
-							if ((intersector.IsDone()) && (intersector.Result().Length() > 0))
-							{
-								if (pIntersections != NULL)
+							#if OCC_VERSION_HEX >= 0x060701
+								IntTools_EdgeEdge intersector;
+								intersector.SetEdge1(edge1);
+								intersector.SetEdge2(edge2);
+								intersector.Perform();
+								if ((intersector.IsDone()) && (intersector.CommonParts().Length() > 0))
 								{
-									for (int i=1; i<=intersector.Result().Length(); i++)
+									if (pIntersections != NULL)
 									{
-										gp_Pnt from, to;
+										for (int i=1; i<=intersector.CommonParts().Length(); i++)
+										{
+											gp_Pnt from, to;
 
-										BRepAdaptor_Curve curve(edge1);
-										curve.D0(intersector.Result().Value(i).First(), from);
-										curve.D0(intersector.Result().Value(i).Last(), to);
+											BRepAdaptor_Curve curve(edge1);
+											curve.D0(intersector.CommonParts().Value(i).First(), from);
+											curve.D0(intersector.CommonParts().Value(i).Last(), to);
 
-										pIntersections->push_back( Cam::Point(from) );
-										pIntersections->push_back( Cam::Point(to) );
+											pIntersections->push_back( Cam::Point(from) );
+											pIntersections->push_back( Cam::Point(to) );
 
-										pIntersections->sort();
-										pIntersections->unique();
+											pIntersections->sort();
+											pIntersections->unique();
+										}
 									}
-								}
 
-								return(true);
-							}
+									return(true);
+								}
+							#else
+								IntTools_BeanBeanIntersector intersector(edge1, edge2);
+								intersector.Perform();
+								if ((intersector.IsDone()) && (intersector.Result().Length() > 0))
+								{
+									if (pIntersections != NULL)
+									{
+										for (int i=1; i<=intersector.Result().Length(); i++)
+										{
+											gp_Pnt from, to;
+
+											BRepAdaptor_Curve curve(edge1);
+											curve.D0(intersector.Result().Value(i).First(), from);
+											curve.D0(intersector.Result().Value(i).Last(), to);
+
+											pIntersections->push_back( Cam::Point(from) );
+											pIntersections->push_back( Cam::Point(to) );
+
+											pIntersections->sort();
+											pIntersections->unique();
+										}
+									}
+
+									return(true);
+								}
+							#endif // OCC_VERSION_HEX
 						} // End if - then
 					} // End for
 				} // End if - then
@@ -2326,26 +2361,47 @@ std::set<Cam::Point> Cam::Path::Intersect( const Cam::Path & rhs, const bool sto
 
 	try
 	{
-		IntTools_BeanBeanIntersector intersector(Edge(), rhs.Edge());
-		intersector.Perform();
-		if (intersector.IsDone())
-		{
-			IntTools_SequenceOfRanges ranges;
-			intersector.Result(ranges);
+		#if OCC_VERSION_HEX >= 0x060701
+			IntTools_EdgeEdge intersector;
+			intersector.SetEdge1(Edge());
+			intersector.SetEdge2(rhs.Edge());
+			intersector.Perform();
 			if (intersector.IsDone())
 			{
-				int num_intersections = intersector.Result().Length();
-				IntTools_SequenceOfRanges ranges;
-				intersector.Result(ranges);
-				for (int index = 1; index <= num_intersections; index++)
+				if (intersector.CommonParts().Length() > 0)
 				{
-					BRepAdaptor_Curve curve(this->Edge());
-					gp_Pnt point = curve.Value(ranges(index).First());
-					intersections.insert(point);
-					if (stop_after_first_point) return(intersections);
+					for (int index = 1; index <= intersector.CommonParts().Length(); index++)
+					{
+						
+						BRepAdaptor_Curve curve(this->Edge());
+						gp_Pnt point = curve.Value(intersector.CommonParts().Value(index).Range1().First());
+						intersections.insert(point);
+						if (stop_after_first_point) return(intersections);
+					}
 				}
 			}
-		}
+		#else
+			IntTools_BeanBeanIntersector intersector(Edge(), rhs.Edge());
+			intersector.Perform();
+			if (intersector.IsDone())
+			{
+				IntTools_SequenceOfRanges ranges;
+				intersector.Result(ranges);
+				if (intersector.IsDone())
+				{
+					int num_intersections = intersector.Result().Length();
+					IntTools_SequenceOfRanges ranges;
+					intersector.Result(ranges);
+					for (int index = 1; index <= num_intersections; index++)
+					{
+						BRepAdaptor_Curve curve(this->Edge());
+						gp_Pnt point = curve.Value(ranges(index).First());
+						intersections.insert(point);
+						if (stop_after_first_point) return(intersections);
+					}
+				}
+			}
+		#endif // OCC_VERSION
 	}
 	catch (Standard_Failure & error) {
         (void) error;	// Avoid the compiler warning.
