@@ -383,7 +383,7 @@ namespace Cam
 		bool Surrounds( const Cam::Point point ) const;
 		bool Surrounds( const ContiguousPath & rhs ) const;
 		TopoDS_Wire Wire() const;
-		std::pair<gp_Pnt, gp_Vec> Nearest(const gp_Pnt reference_location, Standard_Real *pDistanceAlong = NULL);
+		std::pair<gp_Pnt, gp_Vec> Nearest(const gp_Pnt reference_location, Standard_Real *pDistanceAlong = NULL) const;
 		gp_Pln Plane() const;
 		ContiguousPath Section( const Standard_Real start_distance, const Standard_Real end_distance ) const;
 		ContiguousPath InterpolateLines(const double max_deviation, const bool retain_simple_curve_types = false) const;
@@ -427,7 +427,7 @@ namespace Cam
 		#endif // HEEKSCNC
 
 		std::vector<Path> Paths() const;
-		std::list<ContiguousPath> Split( const Cam::Paths &rhs );
+		std::list<ContiguousPath> Split( const Cam::Paths &rhs ) const;
 		void Split( const Cam::Paths &areas, Cam::Paths *pInside, Cam::Paths *pOutside ) const;
 		std::vector<Cam::Point> Corners( const double angle_threshold ) const;
 

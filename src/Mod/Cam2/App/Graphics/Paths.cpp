@@ -740,6 +740,9 @@ namespace Cam
 			BRepBndLib::Add(lhs, lhs_bounding_box);
 			BRepBndLib::Add(rhs, rhs_bounding_box);
 
+			lhs_bounding_box.SetGap( Cam::GetTolerance() );
+			rhs_bounding_box.SetGap( Cam::GetTolerance() );
+
 			if (lhs_bounding_box.IsOut(rhs_bounding_box)) return(false);
 
 			IntTools_FaceFace intersect;
@@ -2076,7 +2079,7 @@ std::set<Cam::Point> Corners(Bnd_Box box)
 	box.Get( aXmin, aYmin, aZmin, aXmax, aYmax, aZmax);
 	std::list<Standard_Real> x, y, z;
 	x.push_back(aXmin);
-	x.push_back(aYmax);
+	x.push_back(aXmax);
 	y.push_back(aYmin);
 	y.push_back(aYmax);
 	z.push_back(aZmin);
@@ -2162,49 +2165,9 @@ bool Cam::ContiguousPath::Surrounds( const Cam::ContiguousPath & rhs ) const
 
 	if (lhs_cpath.Intersect(rhs_cpath, true).size() > 0) return(false);
 
-	/*
-	for (::size_t lhs_counter = 0; lhs_counter < m_paths.size(); lhs_counter++)
-	{
-		for (::size_t rhs_counter = 0; rhs_counter < rhs.m_paths.size(); rhs_counter++)
-		{
-			IntTools_BeanBeanIntersector intersector(m_paths[lhs_counter].Edge(), rhs.m_paths[rhs_counter].Edge());
-			intersector.Perform();
-			if (intersector.IsDone())
-			{
-				if (intersector.Result().Length() > 0) return(false);
-			}
-		} // End for
-	} // End for
-	*/
-
 	// The first test has passed.  They could be sitting next to each other.  Look at
 	// any point on the RHS shape and see if it's inside this shape.
 	bool surrounds = lhs_cpath.Surrounds( rhs_cpath.MidpointForSurroundsCheck() );
-	if (surrounds == true)
-	{
-		/*
-		#ifdef HEEKSCNC
-		static int count=0;
-		count++;
-		{
-			Cam::ContiguousPath temp(*this);
-			HeeksObj *lhsSketch = temp.Sketch();
-			wxString lhsTitle;
-			lhsTitle << _T("lhs ") << count;
-			lhsSketch->OnEditString(lhsTitle);
-			heeksCAD->Add(lhsSketch,NULL);
-		}
-		{
-			Cam::ContiguousPath temp(rhs);
-			HeeksObj *lhsSketch = temp.Sketch();
-			wxString lhsTitle;
-			lhsTitle << _T("rhs ") << count;
-			lhsSketch->OnEditString(lhsTitle);
-			heeksCAD->Add(lhsSketch,NULL);
-		}
-		#endif
-		*/
-	}
 	return( surrounds );
 }
 
@@ -2700,6 +2663,7 @@ std::pair<gp_Pnt, gp_Vec> Cam::Path::Nearest(const gp_Pnt reference_location, St
 	Bnd_Box occ_box;
 	BRepBndLib::Add(edge, occ_box);
 
+	occ_box.SetGap( Cam::GetTolerance() );
 	Extrema_ExtPC extrema(reference_location, GeomAdaptor_Curve(curve));
 	if (extrema.IsDone())
 	{
@@ -2777,17 +2741,15 @@ std::pair<gp_Pnt, gp_Vec> Cam::Path::Nearest(const gp_Pnt reference_location, St
 	return(nearest);
 }
 
-std::pair<gp_Pnt, gp_Vec> Cam::ContiguousPath::Nearest(const gp_Pnt reference_location, Standard_Real *pDistanceAlong /* = NULL */)
+std::pair<gp_Pnt, gp_Vec> Cam::ContiguousPath::Nearest(const gp_Pnt reference_location, Standard_Real *pDistanceAlong /* = NULL */) const
 {
-	ContiguousPath cpath(*this);	// Duplicate so that we don't affect ourselves.
-
-	std::vector<Path>::iterator itBestSoFar = cpath.m_paths.begin();
+	std::vector<Path>::const_iterator itBestSoFar = m_paths.begin();
 	Standard_Real best_u_value = itBestSoFar->EndParameter();
 	std::pair<gp_Pnt, gp_Vec> nearest;
 
-	for (std::vector<Path>::iterator itPath = cpath.m_paths.begin(); itPath != cpath.m_paths.end(); itPath++)
+	for (std::vector<Path>::const_iterator itPath = m_paths.begin(); itPath != m_paths.end(); itPath++)
 	{
-		if (itPath == cpath.m_paths.begin())
+		if (itPath == m_paths.begin())
 		{
 			nearest = itPath->Nearest(reference_location, &best_u_value, false);
 			itBestSoFar = itPath;
@@ -2809,7 +2771,7 @@ std::pair<gp_Pnt, gp_Vec> Cam::ContiguousPath::Nearest(const gp_Pnt reference_lo
 	{
 		// Calculate the distance with the best location found so far.
 		double distance_along = 0.0;
-		for (std::vector<Path>::iterator itPath = cpath.m_paths.begin(); (itPath != itBestSoFar) && (itPath != cpath.m_paths.end()); itPath++)
+		for (std::vector<Path>::const_iterator itPath = m_paths.begin(); (itPath != itBestSoFar) && (itPath != m_paths.end()); itPath++)
 		{
 			distance_along += itPath->Length();
 		}
@@ -3787,9 +3749,7 @@ void Paths::Split( const Cam::Paths &areas, Cam::Paths *pInside, Cam::Paths *pOu
 
 void ContiguousPath::Split( const Cam::Paths &areas, Cam::Paths *pInside, Cam::Paths *pOutside ) const
 {
-	ContiguousPath this_cpath(*this);	// We want to be 'const' so copy ourselves first.
-
-	std::list<ContiguousPath> cpaths = this_cpath.Split( areas );
+	std::list<ContiguousPath> cpaths = this->Split( areas );
 	for (std::list<ContiguousPath>::iterator itCPath = cpaths.begin(); itCPath != cpaths.end(); itCPath++)
 	{
 		bool found = false;
@@ -3839,7 +3799,7 @@ std::list<ContiguousPath> Paths::Split( const Cam::Paths &areas ) const
 	return(sections);
 }
 
-std::list<ContiguousPath> ContiguousPath::Split( const Cam::Paths &area )
+std::list<ContiguousPath> ContiguousPath::Split( const Cam::Paths &area ) const
 {
 	std::list<ContiguousPath> sections;
 	typedef Standard_Real Distance_t;
