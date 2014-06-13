@@ -28,7 +28,7 @@
      <item>
       <widget class="QPushButton" name="AddTPG">
        <property name="toolTip">
-        <string>Add a TPG to the current Cam Feature</string>
+        <string>Add a TPG to the current Machining Session</string>
        </property>
        <property name="text">
         <string>Add TPG</string>
@@ -42,9 +42,6 @@
        </property>
        <property name="text">
         <string/>
-       </property>
-       <property name="placeholderText">
-        <string>Filter</string>
        </property>
       </widget>
      </item>

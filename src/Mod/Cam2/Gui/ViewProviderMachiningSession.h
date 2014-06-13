@@ -1,5 +1,6 @@
 /***************************************************************************
  *   Copyright (c) 2012 Luke Parry    (l.parry@warwick.ac.uk)              *
+ *   Copyright (c) 2013 Andrew Robinson <andrewjrobinson@gmail.com>        *
  *                                                                         *
  *   This file is part of the FreeCAD CAx development system.              *
  *                                                                         *
@@ -21,62 +22,50 @@
  ***************************************************************************/
 
 #include <PreCompiled.h>
-#ifndef _PreComp_
-#endif
 
-#include <Gui/Command.h>
+#ifndef CAMGUI_VIEWPROVIDERMACHININGSESSION_H
+#define CAMGUI_VIEWPROVIDERMACHININGSESSION_H
 
-#include "TaskDlgEditCamFeature.h"
-#include "../ViewProviderCamFeature.h"
+#include <Gui/ViewProviderDocumentObject.h>
 
-using namespace CamGui;
+class QMenu;
 
-
-//**************************************************************************
-//**************************************************************************
-// TaskDialog
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-TaskDlgEditCamFeature::TaskDlgEditCamFeature(ViewProviderCamFeature *camFeatView)
-    : TaskDialog(),camFeatView(camFeatView)
+namespace Gui
 {
-    assert(camFeatView);
+  class View3DInventorViewer;
 }
 
-TaskDlgEditCamFeature::~TaskDlgEditCamFeature()
-{
-
+namespace Cam {
+    class MachiningSession;
 }
 
-//==== calls from the TaskView ===============================================================
-
-void TaskDlgEditCamFeature::open()
+namespace CamGui {
+class CamGuiExport ViewProviderMachiningSession : public Gui::ViewProviderDocumentObject
 {
+    PROPERTY_HEADER(CamGui::ViewProviderMachiningSession);
 
-}
+public:
+    /// constructor
+    ViewProviderMachiningSession();
+    /// destructor
+    virtual ~ViewProviderMachiningSession();
 
-void TaskDlgEditCamFeature::clicked(int)
-{
+    void setupContextMenu(QMenu *menu, QObject *receiver, const char *member);
+    bool setEdit(int ModNum);
+    void setEditViewer(Gui::View3DInventorViewer* viewer, int ModNum);
     
-}
+    void unsetEditViewer(Gui::View3DInventorViewer* viewer);
+    void unsetEdit(int ModNum);
+    bool doubleClicked(void);
 
-bool TaskDlgEditCamFeature::accept()
-{
-    return true;
-}
+    /// grouping handling
+    std::vector<App::DocumentObject*> claimChildren(void)const;
+    Cam::MachiningSession* getObject() const;
 
-bool TaskDlgEditCamFeature::reject()
-{
-    std::string document = getDocumentName(); // needed because resetEdit() deletes this instance
-    Gui::Command::doCommand(Gui::Command::Gui,"Gui.getDocument('%s').resetEdit()", document.c_str());
-    Gui::Command::doCommand(Gui::Command::Doc,"App.getDocument('%s').recompute()", document.c_str());
+//    std::vector<std::string> getDisplayModes(void) const;
 
-    return true;
-}
+//    QIcon getIcon(void) const;
+};
 
-void TaskDlgEditCamFeature::helpRequested()
-{
-
-}
-
-#include "TaskDialog/moc_TaskDlgEditCamFeature.cpp"
+} // namespace
+#endif //CAMGUI_VIEWPROVIDERMACHININGSESSION_H

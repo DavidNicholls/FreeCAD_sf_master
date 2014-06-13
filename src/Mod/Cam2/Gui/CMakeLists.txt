@@ -39,7 +39,7 @@ qt4_add_resources(CamGui_SRCS Resources/Cam.qrc)
 link_directories(${OCC_LIBRARY_DIR})
 
 set(CamGui_MOC_HDRS
-    TaskDialog/TaskDlgEditCamFeature.h
+	TaskDialog/TaskDlgEditMachiningSession.h
     # TaskDialog/TaskDlgEditCamPartsList.h
     # TaskDialog/TaskDlgEditStockGeometry.h
     TaskDialog/TaskDlgEditTPGFeature.h
@@ -75,14 +75,14 @@ SET(CamGui_SRCS
     Command.cpp
     PreCompiled.cpp
     PreCompiled.h
-    TaskDialog/TaskDlgEditCamFeature.cpp
-    TaskDialog/TaskDlgEditCamFeature.h
+    TaskDialog/TaskDlgEditMachiningSession.cpp
+    TaskDialog/TaskDlgEditMachiningSession.h
     TaskDialog/TaskDlgEditTPGFeature.cpp
     TaskDialog/TaskDlgEditTPGFeature.h
     Workbench.cpp
     Workbench.h
-    ViewProviderCamFeature.cpp
-    ViewProviderCamFeature.h
+    ViewProviderMachiningSession.cpp
+    ViewProviderMachiningSession.h
     ViewProviderTPGFeature.cpp
     ViewProviderTPGFeature.h
     ViewProviderToolFeature.cpp

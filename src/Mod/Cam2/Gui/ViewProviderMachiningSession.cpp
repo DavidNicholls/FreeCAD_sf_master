@@ -40,40 +40,40 @@
 #include <Gui/View3DInventor.h>
 
 
-#include "../App/Features/CamFeature.h"
+#include "../App/Features/MachiningSession.h"
 //#include "../App/Features/StockGeometry.h"
 //#include "../App/Features/CamPartsList.h"
 //#include "../App/Features/TPGList.h"
 //#include "../App/Features/GCodeFeature.h"
 
-#include "TaskDialog/TaskDlgEditCamFeature.h"
-#include "ViewProviderCamFeature.h"
+#include "TaskDialog/TaskDlgEditMachiningSession.h"
+#include "ViewProviderMachiningSession.h"
 
 using namespace CamGui;
 
-PROPERTY_SOURCE(CamGui::ViewProviderCamFeature, Gui::ViewProviderDocumentObject)
+PROPERTY_SOURCE(CamGui::ViewProviderMachiningSession, Gui::ViewProviderDocumentObject)
 
-ViewProviderCamFeature::ViewProviderCamFeature()
+ViewProviderMachiningSession::ViewProviderMachiningSession()
 {
-    sPixmap = "Cam_CamFeature.svg";
+    sPixmap = "Cam_MachiningSession.svg";
 }
 
-ViewProviderCamFeature::~ViewProviderCamFeature()
+ViewProviderMachiningSession::~ViewProviderMachiningSession()
 {
 }
 
-void ViewProviderCamFeature::setupContextMenu(QMenu *menu, QObject *receiver, const char *member)
+void ViewProviderMachiningSession::setupContextMenu(QMenu *menu, QObject *receiver, const char *member)
 {
-    menu->addAction(QObject::tr("Edit CamFeature"), receiver, member);
+    menu->addAction(QObject::tr("Edit MachiningSession"), receiver, member);
 }
 
-bool ViewProviderCamFeature::setEdit(int ModNum)
+bool ViewProviderMachiningSession::setEdit(int ModNum)
 {
     /*When double-clicking on the item for this sketch the
     object unsets and sets its edit mode without closing
     the task panel */
     Gui::TaskView::TaskDialog *dlg = Gui::Control().activeDialog();
-    TaskDlgEditCamFeature *taskDlgCamFeat = qobject_cast<TaskDlgEditCamFeature *>(dlg);
+    TaskDlgEditMachiningSession *taskDlgCamFeat = qobject_cast<TaskDlgEditMachiningSession *>(dlg);
 
     if (dlg && !taskDlgCamFeat) {
         QMessageBox msgBox;
@@ -94,40 +94,40 @@ bool ViewProviderCamFeature::setEdit(int ModNum)
     if (taskDlgCamFeat)
         Gui::Control().showDialog(taskDlgCamFeat);
     else
-        Gui::Control().showDialog(new TaskDlgEditCamFeature(this));
+        Gui::Control().showDialog(new TaskDlgEditMachiningSession(this));
 
     return true;
 }
 
-void ViewProviderCamFeature::setEditViewer(Gui::View3DInventorViewer* viewer, int ModNum)
+void ViewProviderMachiningSession::setEditViewer(Gui::View3DInventorViewer* viewer, int ModNum)
 {
     viewer->setEditing(TRUE);
 //     SoNode* root = viewer->getSceneGraph();
 //     //static_cast<Gui::SoFCUnifiedSelection*>(root)->selectionRole.setValue(FALSE);
 }
 
-bool ViewProviderCamFeature::doubleClicked(void)
+bool ViewProviderMachiningSession::doubleClicked(void)
 {
     Gui::Application::Instance->activeDocument()->setEdit(this);
     return true;
 }
 
-void ViewProviderCamFeature::unsetEditViewer(Gui::View3DInventorViewer* viewer)
+void ViewProviderMachiningSession::unsetEditViewer(Gui::View3DInventorViewer* viewer)
 {
     viewer->setEditing(FALSE);
 }
 
-void ViewProviderCamFeature::unsetEdit(int ModNum)
+void ViewProviderMachiningSession::unsetEdit(int ModNum)
 {
     // clear the selection and set the new/edited sketch(convenience)
     Gui::Selection().clearSelection();
 }
 
-std::vector<App::DocumentObject*> ViewProviderCamFeature::claimChildren(void) const
+std::vector<App::DocumentObject*> ViewProviderMachiningSession::claimChildren(void) const
 {
-    // Collect any child fields and put this in the CamFeature tree
+    // Collect any child fields and put this in the MachiningSession tree
     std::vector<App::DocumentObject*> temp;
-    Cam::CamFeature *feat = static_cast<Cam::CamFeature*>(getObject());
+    Cam::MachiningSession *feat = static_cast<Cam::MachiningSession*>(getObject());
     try {
     	// claim the TPG's that belong to this Feature
     	std::vector<App::DocumentObject*> tpgs = feat->TPGList.getValues();
@@ -141,7 +141,7 @@ std::vector<App::DocumentObject*> ViewProviderCamFeature::claimChildren(void) co
 }
 
 
-//std::vector<std::string> ViewProviderCamFeature::getDisplayModes(void) const
+//std::vector<std::string> ViewProviderMachiningSession::getDisplayModes(void) const
 //{
 //  // get the modes of the father
 //  std::vector<std::string> StrList;
@@ -152,12 +152,12 @@ std::vector<App::DocumentObject*> ViewProviderCamFeature::claimChildren(void) co
 //  return StrList;
 //}
 
-//QIcon ViewProviderCamFeature::getIcon(void) const
+//QIcon ViewProviderMachiningSession::getIcon(void) const
 //{
-//	return Gui::BitmapFactory().pixmap("Cam_CamFeature");
+//	return Gui::BitmapFactory().pixmap("Cam_MachiningSession");
 //}
 
-Cam::CamFeature* ViewProviderCamFeature::getObject() const
+Cam::MachiningSession* ViewProviderMachiningSession::getObject() const
 {
-    return dynamic_cast<Cam::CamFeature*>(pcObject);
+    return dynamic_cast<Cam::MachiningSession*>(pcObject);
 }

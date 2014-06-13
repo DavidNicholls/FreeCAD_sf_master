@@ -90,7 +90,7 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     Gui::MenuItem* cam = new Gui::MenuItem();
     root->insertItem(item, cam);
     cam->setCommand("Cam");
-    *cam << "Cam_CamFeature";
+    *cam << "Cam_MachiningSession";
 	*cam << "Cam_TPGFeature";
     *cam << "Separator";
     *cam << "Cam_ToolFeature";
@@ -108,7 +108,7 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
 
     Gui::ToolBarItem * cam = new Gui::ToolBarItem(root);
     cam->setCommand("Cam");
-    *cam << "Cam_CamFeature";
+    *cam << "Cam_MachiningSession";
 	*cam << "Cam_TPGFeature";
     *cam << "Separator";
     *cam << "Cam_ToolFeature";

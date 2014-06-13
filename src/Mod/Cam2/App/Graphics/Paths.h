@@ -26,7 +26,6 @@
 	#include <PreCompiled.h>
 	#include <QString>
 	#include "Area.h"
-	#include "Feature.h"
 	#include "TPGFeature.h"
 #endif
 

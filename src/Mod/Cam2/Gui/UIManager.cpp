@@ -53,7 +53,7 @@
 
 #include "UIManager.h"
 #include "TPGListModel.h"
-#include "ViewProviderCamFeature.h"
+#include "ViewProviderMachiningSession.h"
 
 using namespace CamGui;
 
@@ -91,9 +91,9 @@ UIManagerInst::~UIManagerInst() {
 // ----- GUI Command Implementations -----
 
 /**
- * Used by the CamFeature GUI Command to do the work required to add a CamFeature
+ * Used by the MachiningSession GUI Command to do the work required to add a MachiningSession
  */
-bool UIManagerInst::CamFeature() {
+bool UIManagerInst::MachiningSession() {
 
 
 	// get the document
@@ -103,57 +103,15 @@ bool UIManagerInst::CamFeature() {
 		return false;
 	}
 
-	// make the CamFeature
-	return makeCamFeature(activeDoc) != NULL;
-
-//    std::string FeatName = activeDoc->getUniqueObjectName("Cam Feature");
-////    App::Document *doc   = Gui::Document::getActiveGuiDocument()->getDocument();
-//
-//    // NOTE Need to use simple test case file
-//    App::DocumentObject *camFeat =  activeDoc->addObject("Cam::CamFeature", FeatName.c_str());
-//
-//    // Initialise a few TPG Features and put this in tree for testing
-//
-////    App::DocumentObject *docObj = doc->getObject(FeatName.c_str());
-//
-//    if(camFeat && camFeat->isDerivedFrom(Cam::CamFeature::getClassTypeId())) {
-//		Cam::CamFeature *camFeat = dynamic_cast<Cam::CamFeature *>(camFeat);
-//
-//		// We Must Initialise the Cam Feature before usage
-//		camFeat->initialise();
-//    }
-//    else {
-//    	Base::Console().Error("Unable to create Cam Feature\n");
-//    	return false;
-//	}
-////    App::DocumentObject *docObj = activeDoc->getObject(FeatName.c_str());
-////
-////    if(docObj && docObj->isDerivedFrom(Cam::CamFeature::getClassTypeId())) {
-////        Cam::CamFeature *camFeat = dynamic_cast<Cam::CamFeature *>(docObj);
-////
-////        // We Must Initialise the Cam Feature before usage
-////        camFeat->initialise();
-////    }
-////    else {
-////    	Base::Console().Error("Unable to get Cam Feature\n");
-////    	return false;
-////	}
-//    return true;
+	// make the MachiningSession
+	return makeMachiningSession(activeDoc) != NULL;
 }
 
 /**
  * Used by the CamTPGFeature GUI Command to do the work required to add a TPGFeature
  */
-bool UIManagerInst::TPGFeature() {
-
-
-	// get the document
-//	App::Document* activeDoc = App::GetApplication().getActiveDocument();
-//	if (!activeDoc) {
-//		Base::Console().Error("No active document! Please create or open a FreeCad document\n");
-//		return false;
-//	}
-
+bool UIManagerInst::TPGFeature() 
+{
 	Cam::TPGDescriptorCollection *plugins = Cam::TPGFactory().getDescriptors();
 	if (plugins && plugins->size() > 0)
 		addTPG(plugins->at(0));
@@ -201,7 +159,7 @@ bool UIManagerInst::MachineFeature() {
 /**
  * Executes the selected TPG(s) to (re)produce its Tool Path.
  * TODO: make non-TPG selection a warning only
- * TODO: allow CamFeature selection to run all TPG's within
+ * TODO: allow MachiningSession selection to run all TPG's within
  * TODO: allow (and ask for) parallel TPG execution.
  */
 bool UIManagerInst::RunTPG() {
@@ -274,7 +232,7 @@ bool UIManagerInst::WatchHighlight() {
 }
 
 //test
-//delObjConnection = getDocument()->signalDeletedObject.connect(boost::bind(&Cam::CamFeature::onDelete, this, _1));
+//delObjConnection = getDocument()->signalDeletedObject.connect(boost::bind(&Cam::MachiningSession::onDelete, this, _1));
 
 
 //void UIManagerInst::onHighlightObject(const Gui::ViewProviderDocumentObject& docObjVP,
@@ -398,9 +356,9 @@ void UIManagerInst::addTPG(Cam::TPGDescriptor *tpgDescriptor)
     }
 
     /////// PSEUDO CODE ///////
-    // Check if CamFeature is selected?
+    // Check if MachiningSession is selected?
     	// add TPG to this feature (after other TPG's)
-    // if a parent of selection is a CamFeature?
+    // if a parent of selection is a MachiningSession?
     	// on selection of?
     		// TPG:
     			// add TPG before current selection
@@ -408,12 +366,12 @@ void UIManagerInst::addTPG(Cam::TPGDescriptor *tpgDescriptor)
     			// add TPG before parent TPG
     		// Machine Program:
     			// add TPG at end of TPG's
-    // else if count(CamFeature) == 1
+    // else if count(MachiningSession) == 1
     	// add TPG to this feature (after other TPG's)
     // else
-    	// Ask if we should create a new CamFeature?
-    		// Add CamFeature
-    		// Add TPG to new CamFeature
+    	// Ask if we should create a new MachiningSession?
+    		// Add MachiningSession
+    		// Add TPG to new MachiningSession
     	// else do nothing
 
     /////// END PSEUDO ///////
@@ -424,10 +382,10 @@ void UIManagerInst::addTPG(Cam::TPGDescriptor *tpgDescriptor)
 		return;
 	}
 
-	// check for CamFeature in selection
-    Gui::SelectionFilter CamFeatureFilter("SELECT Cam::CamFeature COUNT 1");
-    if (CamFeatureFilter.match()) {
-    	Cam::CamFeature *CamFeature = static_cast<Cam::CamFeature*>(CamFeatureFilter.Result[0][0].getObject());
+	// check for MachiningSession in selection
+    Gui::SelectionFilter MachiningSessionFilter("SELECT Cam::MachiningSession COUNT 1");
+    if (MachiningSessionFilter.match()) {
+    	Cam::MachiningSession *MachiningSession = static_cast<Cam::MachiningSession*>(MachiningSessionFilter.Result[0][0].getObject());
 
 		// create the feature (for Document Tree)
 	    std::string tpgFeatName = activeDoc->getUniqueObjectName(tpgDescriptor->name.toAscii().constData());
@@ -441,7 +399,7 @@ void UIManagerInst::addTPG(Cam::TPGDescriptor *tpgDescriptor)
 			// Add descriptor details
 			tpgFeature->PluginId.setValue(tpgDescriptor->id.toStdString().c_str());
 
-			CamFeature->addTPG(tpgFeature);
+			MachiningSession->addTPG(tpgFeature);
 
 			activeDoc->recompute();
 	    }
@@ -455,122 +413,67 @@ void UIManagerInst::addTPG(Cam::TPGDescriptor *tpgDescriptor)
 	    	return;
 		}
     }
-    //TODO: check the selection is a child of a CamFeature
+    //TODO: check the selection is a child of a MachiningSession
     else {
-    	// get all CamFeatures in document
-    	std::vector<App::DocumentObject*> camFeatures = activeDoc->getObjectsOfType(Cam::CamFeature::getClassTypeId());
+    	// get all MachiningSessions in document
+    	std::vector<App::DocumentObject*> camFeatures = activeDoc->getObjectsOfType(Cam::MachiningSession::getClassTypeId());
     	if (camFeatures.size() == 1) { // only one found (just add to it)
-    		Cam::CamFeature *CamFeature = static_cast<Cam::CamFeature*>(camFeatures[0]);
-    		if (CamFeature) {
-    			makeTPGFeature(activeDoc, CamFeature, tpgDescriptor);
+    		Cam::MachiningSession *MachiningSession = static_cast<Cam::MachiningSession*>(camFeatures[0]);
+    		if (MachiningSession) {
+    			makeTPGFeature(activeDoc, MachiningSession, tpgDescriptor);
     		}
     	}
     	else if (camFeatures.size() == 0) { // none found (ask to add one first)
             QMessageBox msgBox;
-            msgBox.setText(QObject::tr("You do not have any Cam Features in your document."));
+            msgBox.setText(QObject::tr("You do not have any Cam Machining Sessions in your document."));
             msgBox.setInformativeText(QObject::tr("Would you please me to create one?"));
             msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
             msgBox.setDefaultButton(QMessageBox::Yes);
             int ret = msgBox.exec();
             if (ret == QMessageBox::Yes) {
-            	Cam::CamFeature *CamFeature = makeCamFeature(activeDoc);
+            	Cam::MachiningSession *MachiningSession = makeMachiningSession(activeDoc);
             	activeDoc->recompute();
-//            	activeDoc->recomputeFeature(CamFeature);
-            	if (CamFeature)
-            		makeTPGFeature(activeDoc, CamFeature, tpgDescriptor);
+//            	activeDoc->recomputeFeature(MachiningSession);
+            	if (MachiningSession)
+            		makeTPGFeature(activeDoc, MachiningSession, tpgDescriptor);
             }
     	}
-    	else { // more than one CamFeature
+    	else { // more than one MachiningSession
     		Base::Console().Error("You have more than one Cam Feature.  Please select the one you wish to add the TPG to.\n");
     	}
     }
-
-
-    // Test settings editor
-//    Cam::TPG* tpg = tpgDescriptor->make();
-//    Q_EMIT updatedTPGSelection(tpg);
-//
-//    Base::Console().Log("This is where I would add a '%s' TPG to the document", tpgDescriptor->name.toStdString().c_str());
-
-//    // TPG was successfully created
-//    // Find currently active CamFeature and add create a new TPGFeature and assign the TPG
-//    Cam::CamFeature *camFeat = NULL;
-//
-//    Gui::Document * doc = Gui::Application::Instance->activeDocument();
-//    if (doc->getInEdit() && doc->getInEdit()->isDerivedFrom(ViewProviderCamFeature::getClassTypeId())) {
-//        ViewProviderCamFeature *vp = dynamic_cast<ViewProviderCamFeature*>(doc->getInEdit());
-//        if(!vp) {
-//            Base::Console().Log("An invalid view provider is currently being used");
-//            return;
-//        }
-//        camFeat = vp->getObject();
-//    }
-//
-//    // Create a new TPG Feature
-//    if (camFeat != NULL) {
-//        std::string tpgFeatName = doc->getDocument()->getUniqueObjectName("TPGFeature");
-//        App::DocumentObject *tpgDocObj =  doc->getDocument()->addObject("Cam::TPGFeature", tpgFeatName.c_str());
-//
-//        if(!tpgDocObj || !tpgDocObj->isDerivedFrom(Cam::TPGFeature::getClassTypeId()))
-//            return;
-//
-//        Cam::TPGFeature *tpgFeat = dynamic_cast<Cam::TPGFeature *>(tpgDocObj);
-//
-//        // Set a friendly label
-//        if (tpgFeat != NULL) {
-//            tpgFeat->Label.setValue(tpgDescriptor->name.toAscii());
-//            Cam::TPG *temp = tpgDescriptor->make();
-//            QMessageBox(QMessageBox::Warning, QString::fromAscii("Info"), temp->getName());
-//            // Attempt to create and load the TPG Plugin
-//            bool loadPlugin = tpgFeat->loadTPG(tpgDescriptor);
-//
-//            if(loadPlugin) {
-//                // Add the Plugin to the TPG Feature's container
-//                camFeat->getTPGContainer()->addTPG(tpgFeat);
-//            } else {
-//                QMessageBox(QMessageBox::Warning, QString::fromAscii("Info"), QString::fromAscii("Plugin couldn't be loaded"));
-//                // remove TPGFeature
-//                doc->getDocument()->remObject(tpgFeatName.c_str());
-//            }
-//        }
-//        else
-//            Base::Console().Log("Unable to find TPG Feature");
-//    }
-//    else
-//        Base::Console().Log("Unable to find Cam Feature");
-
 }
 
 /**
- * Creates a new CamFeature and adds it to the document
+ * Creates a new MachiningSession and adds it to the document
  */
-Cam::CamFeature *UIManagerInst::makeCamFeature(App::Document* Doc)
+Cam::MachiningSession *UIManagerInst::makeMachiningSession(App::Document* Doc)
 {
-	Gui::Command::openCommand("Add Cam Feature");
-	std::string FeatName = Doc->getUniqueObjectName("Cam Feature");
+	Gui::Command::openCommand("Add Machining Session");
+	std::string Name = Doc->getUniqueObjectName("Machining Session");
 
 	// create the object
-	App::DocumentObject *camFeat =  Doc->addObject("Cam::CamFeature", FeatName.c_str());
-	if(camFeat && camFeat->isDerivedFrom(Cam::CamFeature::getClassTypeId())) {
-		Cam::CamFeature *camFeature = dynamic_cast<Cam::CamFeature *>(camFeat);
-		if (camFeature != NULL)
+	App::DocumentObject *machiningSession =  Doc->addObject("Cam::MachiningSession", Name.c_str());
+	if(machiningSession && machiningSession->isDerivedFrom(Cam::MachiningSession::getClassTypeId())) {
+		Cam::MachiningSession *camMachiningSession = dynamic_cast<Cam::MachiningSession *>(machiningSession);
+		if (camMachiningSession != NULL)
 		{
-			camFeature->initialise();
+			camMachiningSession->initialise();
 
 			Gui::Command::commitCommand();
 	//		Doc->recompute();
-			return camFeature;
+			return camMachiningSession;
 		}
 		else
 		{
-			Base::Console().Error("Unable to create Cam Feature\n");
+			Base::Console().Error("Unable to create Machining Session\n");
 
 			Gui::Command::abortCommand();
 			return NULL;
 		}
 	}
 	else {
-		Base::Console().Error("Unable to create Cam Feature\n");
+		Base::Console().Error("Unable to create Machining Session\n");
 
 		Gui::Command::abortCommand();
 		return NULL;
@@ -578,9 +481,9 @@ Cam::CamFeature *UIManagerInst::makeCamFeature(App::Document* Doc)
 }
 
 /**
- * Creates a new TPGFeature and adds it to the CamFeature
+ * Creates a new TPGFeature and adds it to the MachiningSession
  */
-Cam::TPGFeature *UIManagerInst::makeTPGFeature(App::Document* Doc, Cam::CamFeature *CamFeature, Cam::TPGDescriptor *tpgDescriptor)
+Cam::TPGFeature *UIManagerInst::makeTPGFeature(App::Document* Doc, Cam::MachiningSession *MachiningSession, Cam::TPGDescriptor *tpgDescriptor)
 {
 	Gui::Command::openCommand("Add TPG");
     std::string tpgFeatName = Doc->getUniqueObjectName(tpgDescriptor->name.toStdString().c_str());
@@ -593,7 +496,7 @@ Cam::TPGFeature *UIManagerInst::makeTPGFeature(App::Document* Doc, Cam::CamFeatu
 
 		// Add descriptor details
 		tpgFeature->PluginId.setValue(tpgDescriptor->id.toStdString().c_str());
-		CamFeature->addTPG(tpgFeature);
+		MachiningSession->addTPG(tpgFeature);
 //		Doc->recompute();
 
 	    Gui::Command::commitCommand();

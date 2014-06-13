@@ -20,40 +20,47 @@
  *                                                                         *
  ***************************************************************************/
 
-#include <PreCompiled.h>
-#ifndef _PreComp_
-# include <Standard_Failure.hxx>
-# include <TopoDS_Solid.hxx>
-# include <TopExp_Explorer.hxx>
-# include <TopoDS.hxx>
-# include <BRep_Tool.hxx>
-#endif
+#ifndef CAMGUI__TaskDlgEditMachiningSession_H
+#define CAMGUI__TaskDlgEditMachiningSession_H
 
-#include "Feature.h"
+#include <Gui/TaskView/TaskDialog.h>
 
-namespace Cam {
+#include "../ViewProviderMachiningSession.h"
 
-PROPERTY_SOURCE(Cam::Feature, Part::Feature)
+namespace CamGui {
 
-Feature::Feature()
+/// simulation dialog for the TaskView
+class CamGuiExport TaskDlgEditMachiningSession : public Gui::TaskView::TaskDialog
 {
-}
+    Q_OBJECT
 
-Feature::~Feature()
-{
-}
-/*
-TopoDS_Shape Feature::getSolid(const TopoDS_Shape& shape)
-{
-    if (shape.IsNull())
-        Standard_Failure::Raise("Shape is null");
-    TopExp_Explorer xp;
-    xp.Init(shape,TopAbs_SOLID);
-    for (;xp.More(); xp.Next()) {
-        return xp.Current();
-    }
+public:
+    TaskDlgEditMachiningSession(ViewProviderMachiningSession *camFeatView);
+    ~TaskDlgEditMachiningSession();
+    ViewProviderMachiningSession* getMachiningSessionView() const { return camFeatView; }
 
-    return TopoDS_Shape();
-}*/
+public:
+    /// is called the TaskView when the dialog is opened
+    virtual void open();
+    /// is called by the framework if an button is clicked which has no accept or reject role
+    virtual void clicked(int);
+    /// is called by the framework if the dialog is accepted (Ok)
+    virtual bool accept();
+    /// is called by the framework if the dialog is rejected (Cancel)
+    virtual bool reject();
+    /// is called by the framework if the user presses the help button 
+    virtual void helpRequested();
+    virtual bool isAllowedAlterDocument(void) const
+    { return false; }
 
-}
+    /// returns for Close and Help button 
+    virtual QDialogButtonBox::StandardButtons getStandardButtons(void) const
+    { return QDialogButtonBox::Close|QDialogButtonBox::Help; }
+
+protected:
+    ViewProviderMachiningSession   *camFeatView;
+};
+
+} //namespace CamGui
+
+#endif // CAMGUI_TaskDlgEditMachiningSession_H

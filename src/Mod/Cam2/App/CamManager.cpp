@@ -32,7 +32,7 @@
 
 #include "CamManager.h"
 
-#include "Features/CamFeature.h"
+#include "Features/MachiningSession.h"
 #include "Features/MachineFeature.h"
 #include "Features/ToolFeature.h"
 #include "Graphics/Paths.h"

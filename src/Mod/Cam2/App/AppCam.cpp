@@ -29,7 +29,7 @@
 #include <Base/Console.h>
 #include <Base/Interpreter.h>
 
-#include "Features/CamFeature.h"
+#include "Features/MachiningSession.h"
 #include "Features/CamSettingsableFeature.h"
 #include "Features/MachineFeature.h"
 #include "Features/MachineProgramFeature.h"
@@ -121,8 +121,8 @@ void CamExport initCam()
     // call PyType_Ready, otherwise we run into a segmentation fault, later on.
     // This function is responsible for adding inherited slots from a type's base class.
 
-    Cam::CamFeature             ::init();
-    Cam::Settings::Feature ::init();
+    Cam::MachiningSession       ::init();
+	Cam::Settings::Feature ::init();
     Cam::MachineFeature         ::init();
     Cam::MachineProgramFeature  ::init();
     Cam::Settings               ::init();

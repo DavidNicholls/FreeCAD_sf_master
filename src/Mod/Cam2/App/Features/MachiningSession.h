@@ -21,8 +21,8 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef CAM_CAMFEATURE_H
-#define CAM_CAMFEATURE_H
+#ifndef CAM_MACHININGSESSION_H
+#define CAM_MACHININGSESSION_H
 
 //#define CamExport
 #include <PreCompiled.h>
@@ -41,23 +41,17 @@ typedef boost::signals::connection Connection;
 
 namespace Cam
 {
-
-//class CamPartsList;
-//class TPGList;
-//class StockGeometry;
-//class GCodeFeature;
-
 /**
- * The Cam Feature collects all the of the sub features into this parent object
+ * The Cam Machining Session collects all the of the TPG features into this parent object
  * 
  */
-class CamExport CamFeature : public App::DocumentObject
+class CamExport MachiningSession : public App::DocumentObject
 {
-    PROPERTY_HEADER(Cam::CamFeature);
+    PROPERTY_HEADER(Cam::MachiningSession);
 
 public:
-    CamFeature(); ///Constructor
-    virtual ~CamFeature(); ///Destructor
+    MachiningSession(); ///Constructor
+    virtual ~MachiningSession(); ///Destructor
 
     /// This is only called on the creation of a new document object (must be made to intialise hierarchy
     void initialise();
@@ -67,23 +61,14 @@ public:
 
     /// Property
     App::PropertyLinkList TPGList;				// Stores the list of TPG's that are used
-//    App::PropertyLinkList MachineProgramList;	// Stores the list of Machine Programs
 
-//    App::PropertyLink     Result;      // Link to the GCodeFeature (End Result - TOP of TPG hierarchy)
-//    App::PropertyLink     TPGListLink;      // Link to the GCodeFeature (End Result - TOP of TPG hierarchy)
-//    App::PropertyLink     StockGeometryObject;
-//    App::PropertyLink     CamPartsListObject;
-    
-
-    /** @name methods overide Base Class */
-    //@{
     /// recalculate the Feature
     App::DocumentObjectExecReturn *execute(void);
     short mustExecute() const; // Check if recalculation is needed
 
     /// returns the type name of the ViewProvider
     const char* getViewProviderName(void) const {
-        return "CamGui::ViewProviderCamFeature";
+        return "CamGui::ViewProviderMachiningSession";
     }
 
     // from base class
@@ -91,19 +76,10 @@ public:
     virtual unsigned int getMemSize(void) const;
     virtual void Save(Base::Writer &/*writer*/) const;
     virtual void Restore(Base::XMLReader &/*reader*/);
-    //@}
-
-    /// Getters
-//    StockGeometry * getStockGeometry() const;
-//    CamPartsList  * getPartsContainer() const;
-//    TPGList       * getTPGContainer() const;
-//    GCodeFeature  * getGCodeFeature() const;
 
     void addTPG(TPGFeature *tpg);
 
     void updateTPG();
-    // Convenience method (Containment not necessarily needed)
-//    bool hasContainment() { return (getStockGeometry() == 0) ? true : false; }
 
 protected:
     ///Connections
@@ -121,4 +97,4 @@ private:
 
 } //namespace Cam
 
-#endif // CAM_CAMFEATURE_H
+#endif // CAM_MACHININGSESSION_H

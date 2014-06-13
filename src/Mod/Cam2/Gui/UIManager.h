@@ -32,7 +32,7 @@
 #include <Gui/Tree.h>
 #include <Gui/ViewProviderDocumentObject.h>
 
-#include "../App/Features/CamFeature.h"
+#include "../App/Features/MachiningSession.h"
 #include "../App/Features/TPGFeature.h"
 #include "../App/TPG/TPGFactory.h"
 #include "../App/TPG/TPG.h"
@@ -64,14 +64,14 @@ protected:
   Connection highlightObjectConnection;
 
   /**
-   * Creates a new CamFeature and adds it to the document
+   * Creates a new MachiningSession and adds it to the document
    */
-  Cam::CamFeature *makeCamFeature(App::Document* Doc);
+  Cam::MachiningSession *makeMachiningSession(App::Document* Doc);
 
   /**
-   * Creates a new TPGFeature and adds it to the CamFeature
+   * Creates a new TPGFeature and adds it to the MachiningSession
    */
-  Cam::TPGFeature *makeTPGFeature(App::Document* Doc, Cam::CamFeature *CamFeature, Cam::TPGDescriptor *tpgDescriptor);
+  Cam::TPGFeature *makeTPGFeature(App::Document* Doc, Cam::MachiningSession *MachiningSession, Cam::TPGDescriptor *tpgDescriptor);
 
   /**
    * Performs the work to analyse the current selection and send setting update signal
@@ -87,7 +87,7 @@ public:
   static void destruct (void);
 
   // Implementations for GUI Commands
-  bool CamFeature();
+  bool MachiningSession();
   /**
    * Used by the CamTPGFeature GUI Command to do the work required to add a TPGFeature
    */

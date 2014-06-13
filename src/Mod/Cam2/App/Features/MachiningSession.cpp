@@ -55,37 +55,29 @@
 //#include "StockGeometry.h"
 //#include "GCodeFeature.h"
 
-#include "CamFeature.h"
+#include "MachiningSession.h"
 
-// #include "CamFeaturePy.h"
+// #include "MachiningSessionPy.h"
 
 using namespace Cam;
 using namespace Base;
 
-PROPERTY_SOURCE(Cam::CamFeature, App::DocumentObject)
+PROPERTY_SOURCE(Cam::MachiningSession, App::DocumentObject)
 
-const char *camFeatGroup = "Cam Feature";
-
-CamFeature::CamFeature()
+MachiningSession::MachiningSession()
 {
-    ADD_PROPERTY_TYPE(TPGList,(0), camFeatGroup, (App::PropertyType)(App::Prop_None) ,"TPG Features");
-//    ADD_PROPERTY_TYPE(MachineProgramList,(0), camFeatGroup, (App::PropertyType)(App::Prop_None) ,"Machine Program Features");
-
-//    ADD_PROPERTY_TYPE(Result,              (0), camFeatGroup, (App::Prop_None),"Result");
-//    ADD_PROPERTY_TYPE(TPGListLink,         (0), camFeatGroup, (App::Prop_None),"TPGList");
-//    ADD_PROPERTY_TYPE(StockGeometryObject ,(0), camFeatGroup, (App::PropertyType)(App::Prop_None) ,"Stock Geometry");
-//    ADD_PROPERTY_TYPE(CamPartsListObject  ,(0), camFeatGroup, (App::PropertyType)(App::Prop_None) ,"Cam Parts List");
+    ADD_PROPERTY_TYPE(TPGList,(0), "Machining Session", (App::PropertyType)(App::Prop_None) ,"TPG Features");
 }
 
-CamFeature::~CamFeature()
+MachiningSession::~MachiningSession()
 {
     delObjConnection.disconnect();
 }
 
-void CamFeature::onSettingDocument()
+void MachiningSession::onSettingDocument()
 {
     //Create a signal to observe slot if this item is deleted
-    delObjConnection = getDocument()->signalDeletedObject.connect(boost::bind(&Cam::CamFeature::onDelete, this, _1));
+    delObjConnection = getDocument()->signalDeletedObject.connect(boost::bind(&Cam::MachiningSession::onDelete, this, _1));
 
     //test
 
@@ -93,9 +85,9 @@ void CamFeature::onSettingDocument()
 
 
 /**
- * Initialise creates the basic Cam Feature tree with all the required sub features
+ * Initialise creates the basic Cam Machining Session tree with all the required sub features
  */
-void CamFeature::initialise()
+void MachiningSession::initialise()
 {    
     App::Document *doc = getDocument();
 
@@ -136,7 +128,7 @@ void CamFeature::initialise()
 //    doc->recompute();
 }
 
-void CamFeature::onDelete(const App::DocumentObject &docObj) {
+void MachiningSession::onDelete(const App::DocumentObject &docObj) {
 
     // If deleted object matches this cam feature, proceed to delete children
 	const char *myName = getNameInDocument();
@@ -155,7 +147,7 @@ void CamFeature::onDelete(const App::DocumentObject &docObj) {
     }
 }
 
-short int CamFeature::mustExecute() const
+short int MachiningSession::mustExecute() const
 {
 //    if(StockGeometryObject.isTouched() || CamPartsListObject.isTouched())
 //        return 1;
@@ -163,7 +155,7 @@ short int CamFeature::mustExecute() const
 }
 
 
-App::DocumentObjectExecReturn *CamFeature::execute(void)
+App::DocumentObjectExecReturn *MachiningSession::execute(void)
 {
   
 //    TPGList *tpgList = getTPGContainer();
@@ -176,16 +168,16 @@ App::DocumentObjectExecReturn *CamFeature::execute(void)
     return App::DocumentObject::StdReturn;
 }
 
-// PyObject *CamFeature::getPyObject(void)
+// PyObject *MachiningSession::getPyObject(void)
 // {
 //     if (PythonObject.is(Py::_None())) {
 //         // ref counter is set to 1
-//         PythonObject = Py::Object(new CamFeaturePy(this),true);
+//         PythonObject = Py::Object(new MachiningSessionPy(this),true);
 //     }
 //     return Py::new_reference_to(PythonObject);
 // }
 
-//TPGList * CamFeature::getTPGContainer() const
+//TPGList * MachiningSession::getTPGContainer() const
 //{
 ////    App::DocumentObject *obj = TPGListLink.getValue();
 ////    if(obj && obj->isDerivedFrom(TPGList::getClassTypeId()))
@@ -195,7 +187,7 @@ App::DocumentObjectExecReturn *CamFeature::execute(void)
 //}
 //
 //
-//StockGeometry * CamFeature::getStockGeometry() const
+//StockGeometry * MachiningSession::getStockGeometry() const
 //{
 //    StockGeometry * stockGeom = 0;
 ////    App::DocumentObject * docObj = StockGeometryObject.getValue();
@@ -205,7 +197,7 @@ App::DocumentObjectExecReturn *CamFeature::execute(void)
 //    return stockGeom;
 //}
 //
-//CamPartsList * CamFeature::getPartsContainer() const
+//CamPartsList * MachiningSession::getPartsContainer() const
 //{
 //    CamPartsList * camParts= 0;
 ////    App::DocumentObject * docObj = CamPartsListObject.getValue();
@@ -215,7 +207,7 @@ App::DocumentObjectExecReturn *CamFeature::execute(void)
 //    return camParts;
 //}
 //
-//GCodeFeature * CamFeature::getGCodeFeature() const
+//GCodeFeature * MachiningSession::getGCodeFeature() const
 //{
 //    GCodeFeature *feat = NULL;
 ////    App::DocumentObject *docObj = Result.getValue();
@@ -225,12 +217,12 @@ App::DocumentObjectExecReturn *CamFeature::execute(void)
 //    return feat;
 //}
 
-unsigned int CamFeature::getMemSize(void) const
+unsigned int MachiningSession::getMemSize(void) const
 {
     return 0;
 }
 
-void CamFeature::addTPG(TPGFeature *tpg)
+void MachiningSession::addTPG(TPGFeature *tpg)
 {
 	const std::vector<App::DocumentObject *> vals = TPGList.getValues();
 	std::vector<App::DocumentObject *> newVals(vals);
@@ -238,13 +230,13 @@ void CamFeature::addTPG(TPGFeature *tpg)
 	TPGList.setValues(newVals);
 }
 
-void CamFeature::Save(Writer &writer) const
+void MachiningSession::Save(Writer &writer) const
 {
     //save the father classes
     App::DocumentObject::Save(writer);
 }
 
-void CamFeature::Restore(XMLReader &reader)
+void MachiningSession::Restore(XMLReader &reader)
 {
     //read the father classes
     App::DocumentObject::Restore(reader);

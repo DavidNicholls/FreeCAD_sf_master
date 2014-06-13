@@ -34,7 +34,7 @@
 #include <Gui/WidgetFactory.h>
 #include <Gui/MainWindow.h>
 
-#include "ViewProviderCamFeature.h"
+#include "ViewProviderMachiningSession.h"
 #include "ViewProviderMachineFeature.h"
 #include "ViewProviderMachineProgramFeature.h"
 #include "ViewProviderToolFeature.h"
@@ -120,7 +120,7 @@ extern "C"
         (void) Py_InitModule("CamGui", CamGui_methods);   /* mod name, table ptr */
         Base::Console().Log("Loading GUI of Cam module... done\n");
 
-        CamGui::ViewProviderCamFeature              ::init();
+        CamGui::ViewProviderMachiningSession              ::init();
         CamGui::ViewProviderMachineFeature          ::init();
         CamGui::ViewProviderMachineProgramFeature   ::init();
         CamGui::ViewProviderTPGFeature              ::init();

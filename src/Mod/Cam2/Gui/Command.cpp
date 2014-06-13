@@ -30,33 +30,33 @@
 #include <Gui/MainWindow.h>
 #include <QPointer>
 
-#include "../App/Features/CamFeature.h"
+#include "../App/Features/MachiningSession.h"
 #include "../App/Features/TPGFeature.h"
 
 #include "UIManager.h"
 
 
 //===========================================================================
-// CmdCamFeature
+// CmdMachiningSession
 //===========================================================================
-DEF_STD_CMD_A(CmdCamFeature);
+DEF_STD_CMD_A(CmdMachiningSession);
 
-CmdCamFeature::CmdCamFeature()
-  :Command("Cam_CamFeature")
+CmdMachiningSession::CmdMachiningSession()
+  :Command("Cam_MachiningSession")
 {
     sAppModule    = "Cam";
     sGroup        = QT_TR_NOOP("Cam");
-    sMenuText     = QT_TR_NOOP("Create a new Cam Feature");
-    sToolTipText  = QT_TR_NOOP("Create a new Cam Feature");
+    sMenuText     = QT_TR_NOOP("Create a new Cam Machining Session");
+    sToolTipText  = QT_TR_NOOP("Create a new Cam Machining Session");
     sWhatsThis    = sToolTipText;
     sStatusTip    = sToolTipText;
-    sPixmap       = "Cam_CamFeature";
+    sPixmap       = "Cam_MachiningSession";
 }
 
-void CmdCamFeature::activated(int iMsg)
+void CmdMachiningSession::activated(int iMsg)
 {
-    openCommand("CamFeatureNew");
-	if (CamGui::UIManager().CamFeature()) {
+    openCommand("MachiningSessionNew");
+	if (CamGui::UIManager().MachiningSession()) {
 //		updateActive();
     	commitCommand();
 	}
@@ -64,7 +64,7 @@ void CmdCamFeature::activated(int iMsg)
 		abortCommand();
 }
 
-bool CmdCamFeature::isActive(void)
+bool CmdMachiningSession::isActive(void)
 {
     return hasActiveDocument();
 }
@@ -257,7 +257,7 @@ bool CmdCamWatchHighlight::isActive(void)
 void CreateCamCommands()
 {
     Gui::CommandManager &rcCmdMgr = Gui::Application::Instance->commandManager();
-    rcCmdMgr.addCommand(new CmdCamFeature());
+    rcCmdMgr.addCommand(new CmdMachiningSession());
     rcCmdMgr.addCommand(new CmdCamToolFeature());
     rcCmdMgr.addCommand(new CmdCamTPGFeature());
     rcCmdMgr.addCommand(new CmdCamMachineFeature());

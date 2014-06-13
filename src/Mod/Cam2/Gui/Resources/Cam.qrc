@@ -1,10 +1,10 @@
 <RCC>
     <qresource prefix="/">
-        <file>icons/Cam_CamFeature.svg</file>
+        <file>icons/Cam_MachiningSession.svg</file>
         <file>icons/Cam_ExportMachineProgram.svg</file>
         <file>icons/Cam_MachineFeature.svg</file>
         <file>icons/Cam_MachineProgram.svg</file>
-        <file>icons/Cam_NewCamFeature.svg</file>
+        <file>icons/Cam_NewMachiningSession.svg</file>
         <file>icons/Cam_PostProcess.svg</file>
         <file>icons/Cam_RunTPG.svg</file>
         <file>icons/Cam_ToolFeature.svg</file>

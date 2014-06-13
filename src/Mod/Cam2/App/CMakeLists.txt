@@ -44,12 +44,10 @@ SET(Graphics_SRCS
 SOURCE_GROUP("Graphics" FILES ${Graphics_SRCS})
 
 SET(Features_SRCS
-    Features/CamFeature.cpp
-    Features/CamFeature.h
+	Features/MachiningSession.cpp
+	Features/MachiningSession.h
     Features/CamSettingsableFeature.cpp
     Features/CamSettingsableFeature.h
-    Features/Feature.cpp
-    Features/Feature.h
     Features/MachineFeature.cpp
     Features/MachineFeature.h
     Features/MachineProgramFeature.cpp
