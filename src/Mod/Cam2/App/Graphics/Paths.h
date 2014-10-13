@@ -384,7 +384,8 @@ namespace Cam
 		TopoDS_Wire Wire() const;
 		std::pair<gp_Pnt, gp_Vec> Nearest(const gp_Pnt reference_location, Standard_Real *pDistanceAlong = NULL) const;
 		gp_Pln Plane() const;
-		ContiguousPath Section( const Standard_Real start_distance, const Standard_Real end_distance ) const;
+		bool IsPlanar() const;
+		ContiguousPath Section( const Standard_Real start_distance, const Standard_Real end_distance, const bool extend_last_path_if_necessary = false ) const;
 		ContiguousPath InterpolateLines(const double max_deviation, const bool retain_simple_curve_types = false) const;
 		gp_Pnt Centroid() const;
 		std::set<Cam::Point> Intersect( const ContiguousPath & rhs, const bool stop_after_first_point = false ) const;

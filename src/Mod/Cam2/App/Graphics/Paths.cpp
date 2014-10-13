@@ -2,7 +2,7 @@
 
 #if defined(HEEKSCAD) || defined(HEEKSCNC)
 	#ifndef HEEKS
-		#define HEEKS
+		#define HEEKS 1
 	#endif // HEEKS(anything)
 
 	#include "stdafx.h"
@@ -1010,17 +1010,8 @@ namespace Cam
  */
 Standard_Real Cam::Path::Proportion( const double proportion ) const
 {
-	if (this->IsForwards())
-	{
-		Standard_Real result = ((Curve().LastParameter() - Curve().FirstParameter()) * proportion) + Curve().FirstParameter();
-		return(result);
-	}
-	else
-	{
-		Standard_Real u = ((Curve().LastParameter() - Curve().FirstParameter()) * proportion) + Curve().FirstParameter();
-		Standard_Real result = Curve().LastParameter() - u;
-		return(result);
-	}
+	Standard_Real result = ((EndParameter() - StartParameter()) * proportion) + StartParameter();
+	return(result);
 }
 
 
@@ -2965,83 +2956,22 @@ gp_Pln Cam::ContiguousPath::Plane() const
 		m_plane = std::auto_ptr<gp_Pln>(new gp_Pln(gp_Ax3(gp::XOY())));	// Default to XY plane
 		m_plane->Translate(gp_Vec(m_plane->Location(), StartPoint().Location())); // But at the same height as the linear element.
 		return(*m_plane);
+	}	
+}
+
+bool Cam::ContiguousPath::IsPlanar() const
+{	
+	TopoDS_Wire wire = Wire();
+	if (Cam::IsValid(wire))
+	{
+		BRepBuilderAPI_FindPlane findPlane(wire, Cam::GetTolerance());
+		return(findPlane.Found() != Standard_False);
 	}
-	
-	
+	else
+	{
+		return(false);
+	}	
 }
-
-
-/*
-TopoDS_Shape TopoShape::makeOffsetShape(double offset, double tol, bool intersection,
-                                        bool selfInter, short offsetMode, short join,
-                                        bool fill) const
-{
-    BRepOffsetAPI_MakeOffsetShape mkOffset(this->_Shape, offset, tol, BRepOffset_Mode(offsetMode),
-        intersection ? Standard_True : Standard_False,
-        selfInter ? Standard_True : Standard_False,
-        GeomAbs_JoinType(join));
-    const TopoDS_Shape& res = mkOffset.Shape();
-    if (!fill)
-        return res;
-
-    //s=Part.makePlane(10,10)
-    //s.makeOffsetShape(1.0,0.01,False,False,0,0,True)
-    const BRepOffset_MakeOffset& off = mkOffset.MakeOffset();
-    const BRepAlgo_Image& img = off.OffsetEdgesFromShapes();
-
-    // build up map edge->face
-    TopTools_IndexedDataMapOfShapeListOfShape edge2Face;
-    TopExp::MapShapesAndAncestors(this->_Shape, TopAbs_EDGE, TopAbs_FACE, edge2Face);
-    TopTools_IndexedMapOfShape mapOfShape;
-    TopExp::MapShapes(this->_Shape, TopAbs_EDGE, mapOfShape);
-
-    TopoDS_Shell shell;
-    BRep_Builder builder;
-    TopExp_Explorer xp;
-    builder.MakeShell(shell);
-
-    for (xp.Init(this->_Shape,TopAbs_FACE); xp.More(); xp.Next()) {
-        builder.Add(shell, xp.Current());
-    } 
-
-    for (int i=1; i<= edge2Face.Extent(); ++i) {
-        const TopTools_ListOfShape& los = edge2Face.FindFromIndex(i);
-        if (los.Extent() == 1) {
-            // set the index value as user data to use it in accept()
-            const TopoDS_Shape& edge = edge2Face.FindKey(i);
-            Standard_Boolean ok = img.HasImage(edge);
-            if (ok) {
-                const TopTools_ListOfShape& edges = img.Image(edge);
-                TopTools_ListIteratorOfListOfShape it;
-                it.Initialize(edges);
-                BRepOffsetAPI_ThruSections aGenerator (0,0);
-                aGenerator.AddWire(BRepBuilderAPI_MakeWire(TopoDS::Edge(edge)).Wire());
-                aGenerator.AddWire(BRepBuilderAPI_MakeWire(TopoDS::Edge(it.Value())).Wire());
-                aGenerator.Build();
-                for (xp.Init(aGenerator.Shape(),TopAbs_FACE); xp.More(); xp.Next()) {
-                    builder.Add(shell, xp.Current());
-                }
-                //TopoDS_Face face = BRepFill::Face(TopoDS::Edge(edge), TopoDS::Edge(it.Value()));
-                //builder.Add(shell, face);
-            }
-        }
-    }
-
-    for (xp.Init(mkOffset.Shape(),TopAbs_FACE); xp.More(); xp.Next()) {
-        builder.Add(shell, xp.Current());
-    } 
-
-    //BRepBuilderAPI_Sewing sew(offset);
-    //sew.Load(this->_Shape);
-    //sew.Add(mkOffset.Shape());
-    //sew.Perform();
-
-    //shell.Closed(Standard_True);
-
-    return shell;
-}
-*/
-
 
 /**
 	returns 'true' if all edges represented by the shape (whatever it is) have length
@@ -3100,7 +3030,7 @@ bool Paths::Offset(const double distance)
 	Ax3 original_orientation(original_plane.Position());
 	Ax3 xy_orientation(xy_plane.Position());
 
-	if (original_orientation != xy_orientation)
+	if ((original_orientation != xy_orientation) || (original_plane.Distance(xy_plane) > (2.0 * GetTolerance())))
 	{
 		gp_Trsf transformation;
 		transformation.SetTransformation( original_plane.Position(), xy_plane.Position() );
@@ -3149,7 +3079,7 @@ bool Paths::Offset(const double distance)
 		}
 	}
 
-	if (original_orientation != xy_orientation)
+	if ((original_orientation != xy_orientation) || (original_plane.Distance(xy_plane) > (2.0 * GetTolerance())))
 	{
 		gp_Trsf transformation;
 		transformation.SetTransformation( xy_plane.Position(), original_plane.Position() );
@@ -3312,7 +3242,10 @@ TopoDS_Edge Edge( const TopoDS_Edge original_edge, const Standard_Real start_u, 
 	} // End catch
 }
 
-Cam::ContiguousPath ContiguousPath::Section( const Standard_Real requested_start_distance, const Standard_Real requested_end_distance ) const
+Cam::ContiguousPath ContiguousPath::Section( 
+	const Standard_Real requested_start_distance, 
+	const Standard_Real requested_end_distance,
+	const bool extend_last_path_if_necessary /* = false */ ) const
 {
 	ContiguousPath copy(*this);	// We need to keep ourselves constant so take a copy to play with.
 	ContiguousPath new_contiguous_path;
@@ -3340,13 +3273,16 @@ Cam::ContiguousPath ContiguousPath::Section( const Standard_Real requested_start
 		{
 			if ((distance + itPath->Length()) > end_distance)
 			{
-				new_contiguous_path.Add(itPath->Section(start_distance - distance, end_distance - distance));
+				new_contiguous_path.Add(itPath->Section(start_distance - distance, distance + itPath->Length()));
 				distance = end_distance;
 			}
 			else
 			{
-				new_contiguous_path.Add(itPath->Section(start_distance - distance, itPath->Length()));
-				distance += itPath->Length();
+				if (CDouble(start_distance - distance) != itPath->Length())
+				{
+					new_contiguous_path.Add(itPath->Section(start_distance - distance, itPath->Length()));
+					distance += itPath->Length();
+				}
 			}
 		}
 		else
@@ -3365,10 +3301,27 @@ Cam::ContiguousPath ContiguousPath::Section( const Standard_Real requested_start
 		}
 		else
 		{
-			new_contiguous_path.Add(itPath->Section(0.0, itPath->Length()));
-			distance += itPath->Length();
+			if (CDouble(itPath->Length()) > 0.0)
+			{
+				new_contiguous_path.Add(itPath->Section(0.0, itPath->Length()));
+				distance += itPath->Length();
+			}
 		}
-		itPath = copy.Next(itPath);
+
+		if ((itPath->EndPoint() == this->EndPoint()) && (extend_last_path_if_necessary))
+		{
+			// We're at the end and we want to extend it.
+			if (CDouble(itPath->Length()) != CDouble(itPath->Length() + end_distance - distance))
+			{
+				new_contiguous_path.Add(itPath->Section( itPath->Length(), itPath->Length() + end_distance - distance ) );
+				distance = end_distance;
+			}
+		}
+		else
+		{
+			// Move on to the next path instead.
+			itPath = copy.Next(itPath);
+		}
 	}
 
 	return(new_contiguous_path);
